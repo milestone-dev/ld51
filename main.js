@@ -20,7 +20,6 @@ class UnitElement extends HTMLElement {
 
 	constructor() {
 		super();
-		console.log("constructor");
 		this.order = Order.Idle;
 		this.type = Type.Worker;
 		this.isMoving = false;
@@ -57,7 +56,7 @@ class UnitElement extends HTMLElement {
 
 	get centerY() {
 		const r = this.getBoundingClientRect();
-		return r.x + r.width/2;
+		return r.y + r.width/2;
 	}
 
 	distanceToPoint(x, y) { return Math.sqrt(Math.pow((this.centerX - x), 2) + Math.pow((this.centerY - y), 2)); }
@@ -66,8 +65,13 @@ class UnitElement extends HTMLElement {
 
 	deselect() {this.classList.remove("selected"); }
 
-	orderToPoint(x, y) {
-		console.log(this.distanceToPoint(x,y));
+	orderToPoint(orderX, orderY) {
+		const r = this.getBoundingClientRect();
+		const moveDuration = this.distanceToPoint(orderX,orderY) / this.moveSpeed;
+		this.style.transitionDuration = moveDuration + "s";
+		this.style.left = orderX - r.width/2 + "px";
+		this.style.top = orderY - r.height/2 + "px";
+		// this.offsetHeight;
 	}
 }
 
@@ -96,7 +100,6 @@ function Tick(ms) {
 document.addEventListener("DOMContentLoaded", evt => {
 
 	document.addEventListener("click", evt => {
-		console.log(evt.target, evt.target.tagName.toLowerCase() == UNIT_SELECTOR, evt.shiftKey);
 		if (!evt.target || evt.target.tagName.toLowerCase() != UNIT_SELECTOR) return;
 		if (!evt.shiftKey) DeselectAllUnits();
 		evt.target.select();

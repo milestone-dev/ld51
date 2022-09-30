@@ -5,11 +5,12 @@ body {
 	color:  #fff;
 	font-family: sans-serif;
 	position: relative;
+	user-select: none;
 }
 
 x-unit {
 	position: absolute;
-	transition: top 0s, left 0s, rotate 1s;
+	transition: top 1000s, left 1000s, rotate 1s;
 	transition-timing-function: linear;
 }
 
