@@ -12,3 +12,7 @@ x-unit {
 	transition: top 0s, left 0s, rotate 1s;
 	transition-timing-function: linear;
 }
+
+x-unit.selected {
+	outline: green solid 5px;
+}

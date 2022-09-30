@@ -13,17 +13,10 @@ const Order = {
 	ReturnToResourceDepot: 5,
 }
 
+const UNIT_SELECTOR = "x-unit";
 const UNIT_SIZE = 48;
 
 class UnitElement extends HTMLElement {
-
-	onTransitionStart(evt) {
-		this.isMoving = true;
-	}
-
-	onTransitionEnd(evt) {
-		this.isMoving = false;
-	}
 
 	constructor() {
 		super();
@@ -33,7 +26,14 @@ class UnitElement extends HTMLElement {
 		this.isMoving = false;
 		this.moveSpeed = 200;
 		this.hp = 100;
+	}
 
+	onTransitionStart(evt) {
+		this.isMoving = true;
+	}
+
+	onTransitionEnd(evt) {
+		this.isMoving = false;
 	}
 
 	connectedCallback() {
@@ -48,30 +48,70 @@ class UnitElement extends HTMLElement {
 
 		this.addEventListener("transitionstart", this.onTransitionStart);
 		this.addEventListener("transitionend", this.onTransitionEnd);
+	}
 
+	get centerX() {
+		const r = this.getBoundingClientRect();
+		return r.x + r.width/2;
+	}
+
+	get centerY() {
+		const r = this.getBoundingClientRect();
+		return r.x + r.width/2;
+	}
+
+	distanceToPoint(x, y) { return Math.sqrt(Math.pow((this.centerX - x), 2) + Math.pow((this.centerY - y), 2)); }
+
+	select() {this.classList.add("selected"); }
+
+	deselect() {this.classList.remove("selected"); }
+
+	orderToPoint(x, y) {
+		console.log(this.distanceToPoint(x,y));
 	}
 }
 
 function SetupGame() {
-	customElements.define("x-unit", UnitElement);
+	customElements.define(UNIT_SELECTOR, UnitElement);
+	window.requestAnimationFrame(Tick);
+}
+
+function GetSelectedUnits() {
+	return document.querySelectorAll(UNIT_SELECTOR+".selected");
+}
+
+function DeselectAllUnits() {
+	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.classList.remove("selected"));
 }
 
 function CreateUnit(type) {
-	const unitElm = document.createElement("x-unit");
+	const unitElm = document.createElement(UNIT_SELECTOR);
 	document.body.appendChild(unitElm);
 }
 
+function Tick(ms) {
+	window.requestAnimationFrame(Tick);
+}
+
 document.addEventListener("DOMContentLoaded", evt => {
-	console.log("Hello world");
-	SetupGame();
 
 	document.addEventListener("click", evt => {
-		console.log(evt.pageX, evt.pageY);
-		CreateUnit();
+		console.log(evt.target, evt.target.tagName.toLowerCase() == UNIT_SELECTOR, evt.shiftKey);
+		if (!evt.target || evt.target.tagName.toLowerCase() != UNIT_SELECTOR) return;
+		if (!evt.shiftKey) DeselectAllUnits();
+		evt.target.select();
+	});
+
+	document.addEventListener("keyup", evt => {
+		if (evt.key == "u") CreateUnit();
 	});
 
 	document.addEventListener("contextmenu", evt => {
 		evt.preventDefault();
-		console.log(evt.pageX, evt.pageY);
+		GetSelectedUnits().forEach(unitElm => {
+			unitElm.orderToPoint(evt.pageX, evt.pageY);
+		})
 	});
+
+	SetupGame();
 });
