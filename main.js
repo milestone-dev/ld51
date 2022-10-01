@@ -66,7 +66,7 @@ class UnitElement extends HTMLElement {
 		// Harvester specific
 		this.resourceCarryAmount = 0;
 		this.previousResourceNode = null;
-		this.remainingResources = 10000; // TODO move to data
+		this.remainingResources = 100; // TODO move to data
 	}
 
 	toString() {
@@ -98,13 +98,9 @@ class UnitElement extends HTMLElement {
 				// console.log("Reached depot, depositing resources and finding another resoruce!");
 				PlayerResources += this.resourceCarryAmount;
 				this.resourceCarryAmount = 0;
-
-				if (this.previousResourceNode) {
-					this.orderToHarvestResourceUnit(this.previousResourceNode);
-				} else {
-					// TODO find a resource node
-					this.order = Order.Idle;
-				}
+				if (!this.previousResourceNode || this.previousResourceNode.remainingResources == 0) this.previousResourceNode = FindNearestUnitOfType(this, Type.ResourceNode)
+				if (this.previousResourceNode) this.orderToHarvestResourceUnit(this.previousResourceNode);
+				else this.order = Order.Idle;
 			}
 		} else if (this.order == Order.MoveToFriendlyUnit && this.targetUnit) {
 			if (this.distanceToUnit(this.targetUnit) < STOPPING_RANGE) this.order = Order.Idle;
@@ -234,13 +230,16 @@ class UnitElement extends HTMLElement {
 		if (this.order == Order.HarvestResourceNode && this.targetUnit && this.targetUnit.type == Type.ResourceNode) {
 			// TODO implement timer
 			if (this.resourceCarryAmount >= RESOURCE_CARRY_AMOUNT_MAX) {
-				const nearestDepot = FindNearestResourceDepot(this);
+				const nearestDepot = FindNearestUnitOfType(this, Type.ResourceDepot);
 				if (nearestDepot) this.orderToReturnResourcesToDepotUnit(nearestDepot);
 				else this.order = Order.Idle;
 			} else {
 				this.resourceCarryAmount += 1;
 				this.targetUnit.remainingResources -= 1;
 			}
+		}
+		if (this.type == Type.ResourceNode && this.remainingResources <= 0) {
+			this.remove();
 		}
 	}
 }
@@ -268,9 +267,9 @@ function DeselectAllUnits() {
 	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.classList.remove("selected"));
 }
 
-function FindNearestResourceDepot(unitElm) {
+function FindNearestUnitOfType(unitElm, type) {
 	const nearestDepot = Array.from(GetAllUnits())
-	.filter((unitElm) => { return unitElm.type == Type.ResourceDepot})
+	.filter((unitElm) => { return unitElm.type == type})
 	.sort((a, b) => {
 		return a.distanceToUnit(unitElm) - b.distanceToUnit(unitElm);
 	})
@@ -289,14 +288,12 @@ function CreateUnit(type, playerID,x, y) {
 function Tick(ms) {
 	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.update());
 
-
 	statusBarElement.innerText = `Resources: ${PlayerResources}`;
-
 
 	const selectedUnits = GetSelectedUnits();
 	if (selectedUnits.length > 0) {
 		const unitElm = selectedUnits[0];
-		if (unitElm.type == Type.Harvester) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.resourceCarryAmount);
+		if (unitElm.type == Type.Harvester) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.previousResourceNode, unitElm.resourceCarryAmount);
 		else if (unitElm.type == Type.ResourceNode) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.remainingResources);
 		else Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit);
 	}
