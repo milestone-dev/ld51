@@ -35,7 +35,6 @@ const MINIMAP_SCALE = 64;
 const WORLD_SIZE = 128;
 const GAME_EVENT_INTERVAL = 10000;
 
-
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
 const Type = {
@@ -451,6 +450,16 @@ function SetupGame() {
 	UpdateMinimap();
 	window.requestAnimationFrame(Tick);
 	eventInterval = window.setInterval(CreateNewGameEvent, GAME_EVENT_INTERVAL);
+
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 250, 250);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 750, 150);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 750, 350);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 450, 650);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 650, 100);
+	CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, 450, 250);
+	CreateUnit(Type.Harvester, PLAYER_HUMAN, 450, 250);
+	CreateUnit(Type.Harvester, PLAYER_HUMAN, 550, 250);
+	CreateUnit(Type.Harvester, PLAYER_HUMAN, 550, 350);
 }
 
 function Log(...args) {
@@ -499,6 +508,18 @@ function CreateUnit(type, playerID,x, y) {
 	worldElement.appendChild(unitElm);
 	unitElm.Move(x,y);
 	unitElm.Awake();
+	return unitElm;
+}
+
+function CreateUnitsInArea(num, type, playerID, x, y) {
+	const units = Array();
+	const spread = 3 * TILE;
+	for (var i = 0; i < num; i++) {
+		const spawnX = x - spread + Math.random()*spread;
+		const spawnY = y - spread + Math.random()*spread;
+		units.push(CreateUnit(type, playerID, spawnX, spawnY));
+	}
+	return units;
 }
 
 function UpdateMinimap() {
@@ -521,16 +542,22 @@ function UpdateMinimap() {
 	minimapElement.appendChild(viewportElm);
 }
 
-function CreateNewGameEvent() {
+function CreateNewGameEvent(id = null) {
 
 	const eventKeys = Object.keys(GameEvent);
 	// TODO randomize with weights
-	const newEvent =  GetGameEvent(eventKeys[parseInt(Math.random() * eventKeys.length - 1)]);
+	if (!id) id = eventKeys[parseInt(Math.random() * eventKeys.length - 1)];
+	const newEvent =  GetGameEvent(id);
 	GameEvents.push(newEvent);
 	// TODO ping mini map
 
 	const eventElement = document.createElement("span");
 	eventElement.innerText = newEvent.message;
+
+	if (newEvent.id == GameEvent.PirateInvasion) {
+		const units = CreateUnitsInArea(10, Type.Fighter, PLAYER_ENEMY, WORLD_SIZE*0.9*MINIMAP_SCALE, WORLD_SIZE*0.9*MINIMAP_SCALE);
+		units.forEach(unitElm => unitElm.orderAttackMoveToPoint(0, 0))
+	}
 
 	eventInfoElement.appendChild(eventElement);
 }
