@@ -146,8 +146,9 @@ x-unit[data-player="2"] {filter: hue-rotate(300deg) }
 
 x-sprite {
 	position: absolute;
-	top: 0;	
-	left: 0;	
+	top: 0;
+	left: 0;
+	z-index: 600;
 }
 
 x-sprite.explosion {
@@ -157,7 +158,7 @@ x-sprite.explosion {
 
 @keyframes explode {
   from {
-  	transform: scale(200%);
+  	transform: scale(100%);
   }
 
   to {

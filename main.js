@@ -33,7 +33,7 @@ const PLAYER_HUMAN = 1;
 const PLAYER_ENEMY = 2;
 const PATROL_RANGE = TILE;
 const MINIMAP_SCALE = 64;
-const WORLD_SIZE = 128;
+const WORLD_SIZE = 128*64;
 const EXPLOSION_SPRITE_TIMEOUT = 300;
 const GAME_EVENT_INTERVAL = 10000;
 
@@ -92,6 +92,7 @@ var UNIT_ID = 0;
 var mouseX, mouseY, mouseDown, worldElement, uiElement, unitInfoElement, statusBarElement, minimapElement, eventInfoElement;
 var PlayerResources = [0, 0, 0, 0];
 var eventInterval;
+var HumanPlayerTownHall;
 
 const log = console.log;
 
@@ -400,6 +401,7 @@ class UnitElement extends HTMLElement {
 				// Can carry more resources, continue harvesting
 				if (this.targetUnit && this.targetUnit.isActive && this.targetUnit.isResourceNode && this.targetUnit.remainingResources > 0) {
 					if (this.cooldown <= 0) {
+						this.targetUnit.createSpriteEffect("✨");
 						this.resourceCarryAmount += 1;
 						this.targetUnit.remainingResources -= 1;
 						this.cooldown = this.cooldownMax;
@@ -468,23 +470,23 @@ function SetupGame() {
 	eventInfoElement = document.getElementById("eventInfo");
 	customElements.define(UNIT_SELECTOR, UnitElement);
 	customElements.define(SPRITE_SELECTOR, SpriteElement);
-	worldElement.style.width = px(WORLD_SIZE * MINIMAP_SCALE);
-	worldElement.style.height = px(WORLD_SIZE * MINIMAP_SCALE);
+	worldElement.style.width = px(WORLD_SIZE);
+	worldElement.style.height = px(WORLD_SIZE);
 	PlayerResources[PLAYER_HUMAN] = 100;
 	window.setInterval(UpdateMinimap, 100);
 	UpdateMinimap();
 	window.requestAnimationFrame(Tick);
 	eventInterval = window.setInterval(CreateNewGameEvent, GAME_EVENT_INTERVAL);
 
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 250, 250);
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 750, 150);
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 750, 350);
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 450, 650);
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, 650, 100);
-	CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, 450, 250);
-	CreateUnit(Type.Harvester, PLAYER_HUMAN, 450, 250);
-	CreateUnit(Type.Harvester, PLAYER_HUMAN, 550, 250);
-	CreateUnit(Type.Harvester, PLAYER_HUMAN, 550, 350);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 250, WORLD_SIZE/2 + 200);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 200, WORLD_SIZE/2 - 250);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 250, WORLD_SIZE/2 - 150);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 150, WORLD_SIZE/2 + 250);
+	HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
+	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 + 100);
+	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 - 100);
+	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 - 100, WORLD_SIZE/2 + 100);
 
 	// CreateUnit(Type.StaticDefense, PLAYER_HUMAN, 550, 350);
 	// CreateUnit(Type.Harvester, PLAYER_ENEMY, 650, 450);
@@ -583,8 +585,8 @@ function CreateNewGameEvent(id = null) {
 	eventElement.innerText = newEvent.message;
 
 	if (newEvent.id == GameEvent.PirateInvasion) {
-		const units = CreateUnitsInArea(10, Type.Fighter, PLAYER_ENEMY, WORLD_SIZE*0.9*MINIMAP_SCALE, WORLD_SIZE*0.9*MINIMAP_SCALE);
-		units.forEach(unitElm => unitElm.orderAttackMoveToPoint(0, 0))
+		const units = CreateUnitsInArea(10, Type.Fighter, PLAYER_ENEMY, WORLD_SIZE*0.9, WORLD_SIZE*0.9);
+		units.forEach(unitElm => unitElm.orderAttackMoveToPoint(HumanPlayerTownHall.centerX, HumanPlayerTownHall.centerY))
 	}
 
 	eventInfoElement.appendChild(eventElement);
