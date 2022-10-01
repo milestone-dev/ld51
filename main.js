@@ -38,12 +38,12 @@ const PLAYER_ENEMY = 2;
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
 const UnitTypeData = {};
-function AddUnitTypeData(type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, elevation}; }
+function AddUnitTypeData(type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, attackRange, attackDamage, attackCooldown, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, attackRange, attackDamage, attackCooldown, elevation}; }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
-AddUnitTypeData(Type.Harvester, "Miner Guy", "h", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 200, 1000);
-AddUnitTypeData(Type.Fighter, "Fighter", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 30, 100, 250, 1000);
-AddUnitTypeData(Type.ResourceDepot, "Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 60, 100, 0, 500);
-AddUnitTypeData(Type.ResourceNode, "Resource", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 0, 0);
+AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 200, MINING_RANGE, 0, 10, 1000);
+AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 30, 100, 250, TILE * 3, 5, 10, 1000);
+AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 60, 100, 0, 0, 0, 0, 500);
+AddUnitTypeData(Type.ResourceNode, "Aseroid", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 0, 0, 0, 0, 0);
 
 
 var mouseX, mouseY, debugOutputElement, statusBarElement;
@@ -74,6 +74,29 @@ class UnitElement extends HTMLElement {
 		this.resourceCarryAmount = 0;
 		this.previousResourceNode = null;
 		this.remainingResources = 6000; // TODO move to data
+	}
+
+	Setup(type, playerID) {
+		this.type = type;
+		if (type == Type.ResourceNode) playerID = PLAYER_NEUTRAL;
+		this.playerID = playerID;
+		const data = GetUnitTypeData(this.type);
+		this.data = data;
+		this.name = data.name;
+		this.style.width = data.size;
+		this.style.height = data.size;
+		this.style.lineHeight = px(data.size);
+		this.style.fontSize = px(data.size);
+		this.style.zIndex = data.elevation;
+		this.innerText = data.icon;
+		this.hp = data.hp;
+		this.moveSpeed = data.moveSpeed;
+		this.order = Order.Idle;
+		this.dataset.type = this.type;
+		this.dataset.player = this.playerID;
+
+		this.cooldownMax = data.attackCooldown;
+		this.cooldown = 0;
 	}
 
 	toString() {
@@ -132,28 +155,6 @@ class UnitElement extends HTMLElement {
 
 		this.addEventListener("transitionstart", this.onTransitionStart);
 		this.addEventListener("transitionend", this.onTransitionEnd);
-	}
-
-	Setup(type, playerID) {
-		this.type = type;
-		if (type == Type.ResourceNode) playerID = PLAYER_NEUTRAL;
-		this.playerID = playerID;
-		const data = GetUnitTypeData(this.type);
-		this.name = data.name;
-		this.style.width = data.size;
-		this.style.height = data.size;
-		this.style.lineHeight = px(data.size);
-		this.style.fontSize = px(data.size);
-		this.style.zIndex = data.elevation;
-		this.innerText = data.icon;
-		this.hp = data.hp;
-		this.moveSpeed = data.moveSpeed;
-		// TODO add swich here to manage unit types
-		this.order = Order.Idle;
-		this.dataset.type = this.type;
-		this.dataset.player = this.playerID;
-
-
 	}
 
 	Move(x, y) {
@@ -300,8 +301,11 @@ class UnitElement extends HTMLElement {
 			if (this.resourceCarryAmount < RESOURCE_CARRY_AMOUNT_MAX) {
 				// Can carry more resources, continue harvesting
 				if (this.targetUnit && this.targetUnit.isActive && this.targetUnit.isResourceNode && this.targetUnit.remainingResources > 0) {
-					this.resourceCarryAmount += 1;
-					this.targetUnit.remainingResources -= 1;
+					if (this.cooldown <= 0) {
+						this.resourceCarryAmount += 1;
+						this.targetUnit.remainingResources -= 1;
+						this.cooldown = this.cooldownMax;
+					} else this.cooldown--;
 				} else {
 					// Look for more resources, otherwise return to home.
 					console.log("Tring to mine a resource node that is now gone, find another one");
@@ -399,7 +403,8 @@ function Tick(ms) {
 	const selectedUnits = GetSelectedUnits();
 	if (selectedUnits.length > 0) {
 		const unitElm = selectedUnits[0];
-		if (unitElm.isHarvester) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.previousResourceNode, unitElm.resourceCarryAmount);
+		if (unitElm.isHarvester) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.previousResourceNode, unitElm.resourceCarryAmount, `${unitElm.cooldown}/${unitElm.cooldownMax}`);
+		else if (unitElm.isFighter) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, `${unitElm.cooldown}/${unitElm.cooldownMax}`);
 		else if (unitElm.isResourceNode) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.remainingResources);
 		else if (!unitElm.isMobile) Log(unitElm, unitElm.order);
 		else Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit);

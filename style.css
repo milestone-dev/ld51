@@ -21,6 +21,8 @@ x-unit.selected {
 x-unit.selected[data-player="0"] {outline-color: yellow; }
 x-unit.selected[data-player="2"] {outline-color: red; }
 
+x-unit[data-player="2"] {filter: hue-rotate(300deg) }
+
 #statusBar {
 	position: fixed;
 	top: 10px;
