@@ -1,10 +1,4 @@
-const Type = {
-	Undefined: "Undefined",
-	Harvester: "Harvester",
-	Fighter: "Fighter",
-	ResourceDepot: "ResourceDepot",
-	ResourceNode: "ResourceNode",
-}
+
 
 const Order = {
 	Undefined: "Undefined",
@@ -39,10 +33,18 @@ const PLAYER_ENEMY = 2;
 const PATROL_RANGE = TILE;
 const MINIMAP_SCALE = 64;
 const WORLD_SIZE = 128;
+const GAME_EVENT_INTERVAL = 10000;
 
 
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
+const Type = {
+	Undefined: "Undefined",
+	Harvester: "Harvester",
+	Fighter: "Fighter",
+	ResourceDepot: "ResourceDepot",
+	ResourceNode: "ResourceNode",
+}
 const UnitTypeData = {};
 function AddUnitTypeData(type, name, hotkey, icon, size, cost, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax, elevation}; }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
@@ -51,9 +53,36 @@ AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 
 AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 60, 400, 700, 0, 0, 0, 0, 500);
 AddUnitTypeData(Type.ResourceNode, "Aseroid", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 1000, 0, 0, 0, 0, 0);
 
+const GameEvent = {
+	NewResource: "NewResource",
+	ShipwreckCall: "ShipwreckCall",
+	MapScan: "MapScan",
+	PirateInvasion: "PirateInvasion",
+	AlienInvasion: "AlienInvasion",
+	WarpRift: "WarpRift",
+	IonStorm: "IonStorm",
+	Artefact: "Artefact",
+	Reinforcements: "Reinforcements",
+} 
+const GameEventData = {}
+var GameEvents = [];
+function AddGameEventData(id, message, weight) {GameEventData[id] = {id, message, weight}; }
+function GetGameEvent(id) { return GameEventData[id]; }
+AddGameEventData(GameEvent.NewResource, "A new resource has been discovered", 10);
+AddGameEventData(GameEvent.ShipwreckCall, "Shipwrecked star travellers ask for help", 10);
+AddGameEventData(GameEvent.MapScan, "Sector scanned", 10);
+AddGameEventData(GameEvent.PirateInvasion, "Pirates vessels sighted in the sector", 10);
+AddGameEventData(GameEvent.AlienInvasion, "Alien presence discovered", 10);
+AddGameEventData(GameEvent.WarpRift, "Brace for warp rift", 10);
+AddGameEventData(GameEvent.IonStorm, "Brace for incoming Ion storm", 10);
+AddGameEventData(GameEvent.Artefact, "Precursor Artefact has been discoreved", 10);
+AddGameEventData(GameEvent.Reinforcements, "Reinforcements have arrived", 10);
+
 var UNIT_ID = 0;
-var mouseX, mouseY, mouseDown, worldElement, uiElement, unitInfoElement, statusBarElement, minimapElement;
+var mouseX, mouseY, mouseDown, worldElement, uiElement, unitInfoElement, statusBarElement, minimapElement, eventInfoElement;
 var PlayerResources = [0, 0, 0, 0];
+var eventInterval;
+
 const log = console.log;
 
 function px(i) {return i+"px"};
@@ -394,6 +423,7 @@ function SetupGame() {
 	minimapElement = document.getElementById("minimap");
 	worldElement = document.getElementById("world");
 	uiElement = document.getElementById("ui");
+	eventInfoElement = document.getElementById("eventInfo");
 	customElements.define(UNIT_SELECTOR, UnitElement);
 	worldElement.style.width = px(WORLD_SIZE * MINIMAP_SCALE);
 	worldElement.style.height = px(WORLD_SIZE * MINIMAP_SCALE);
@@ -401,6 +431,7 @@ function SetupGame() {
 	window.setInterval(UpdateMinimap, 100);
 	UpdateMinimap();
 	window.requestAnimationFrame(Tick);
+	eventInterval = window.setInterval(CreateNewGameEvent, GAME_EVENT_INTERVAL);
 }
 
 function Log(...args) {
@@ -469,6 +500,20 @@ function UpdateMinimap() {
 	viewportElm.style.width = px(window.innerWidth/MINIMAP_SCALE);
 	viewportElm.style.height = px(window.innerHeight/MINIMAP_SCALE);
 	minimapElement.appendChild(viewportElm);
+}
+
+function CreateNewGameEvent() {
+
+	const eventKeys = Object.keys(GameEvent);
+	// TODO randomize with weights
+	const newEvent =  GetGameEvent(eventKeys[parseInt(Math.random() * eventKeys.length - 1)]);
+	GameEvents.push(newEvent);
+	// TODO ping mini map
+
+	const eventElement = document.createElement("span");
+	eventElement.innerText = newEvent.message;
+
+	eventInfoElement.appendChild(eventElement);
 }
 
 function Tick(ms) {

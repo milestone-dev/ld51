@@ -3,7 +3,7 @@
 body {
 	background: #111;
 	color:  #fff;
-	font-family: sans-serif;
+	font-family: monospace;
 	position: relative;
 	user-select: none;
 }
@@ -14,31 +14,45 @@ body {
 
 #ui {
 	position: fixed;
-	background: red;
+	background: #444;
 	z-index: 9000;
 	top: 0;
 	left: 0;
+	width: calc(128px + 32px);
+	bottom: 0;
+}
+
+#mainMenuButton {
+	width: 128px;
+	display: block;
+	position: absolute;
+	top: 16px;
+	left: 16px;
+	background:  #000;
+	border: 0;
+	color:  #fff;
+	padding: 4px 0;
+	font: 14px monospace;
 }
 
 #statusBar {
-	position: absolute;
+	position: fixed;
 	top: 10px;
 	left: 10px;
 	right: 10px;
-	width: 100%;
+	right: 10px;
 	font-size: 18px;
-	font-family:  monospace;
 	white-space: nowrap;
+	text-align: right;
 }
 
 #minimap {
 	position: absolute;
 	top: 48px;
-	left: 0;
+	left: 16px;
 	width: 128px;
 	height: 128px;
 	overflow: hidden;
-	border: 1px solid #ccc;
 	background: #222;
 	z-index: 999999;
 }
@@ -81,11 +95,25 @@ body {
 	position: fixed;
 	width: 128px;
 	top: 196px;
-	left: 10px;
+	left: 16px;
 	font-family:  monospace;
 	font-size: 12px;
 }
 
+#eventInfo {
+	position: fixed;
+	width: 128px;
+	bottom: 16px;
+	left: 16px;
+}
+
+#eventInfo span {
+	display: block;
+	overflow: auto;
+	font-family:  monospace;
+	font-size: 10px;
+	margin-bottom: 6px;
+}
 
 x-unit {
 	position: absolute;
