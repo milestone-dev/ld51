@@ -17,3 +17,18 @@ x-unit {
 x-unit.selected {
 	outline: green solid 5px;
 }
+
+#statusBar {
+	position: fixed;
+	top: 10px;
+	left: 10px;
+	font-size: 25px;
+}
+
+#debugOutput {
+	position: fixed;
+	bottom: 10px;
+	left: 10px;
+	font-family:  monospace;
+	font-size: 10px;
+}
