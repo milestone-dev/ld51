@@ -41,12 +41,12 @@ const PATROL_RANGE = TILE;
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
 const UnitTypeData = {};
-function AddUnitTypeData(type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, attackRange, attackDamage, cooldownMax, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, attackRange, attackDamage, cooldownMax, elevation}; }
+function AddUnitTypeData(type, name, hotkey, icon, size, cost, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax, elevation}; }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
-AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 200, MINING_RANGE, 0, 10, 1000);
-AddUnitTypeData(Type.Fighter, "Interceptor", "f", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 250, TILE * 6, 5, 10, 1000);
-AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 60, 100, 0, 0, 0, 0, 500);
-AddUnitTypeData(Type.ResourceNode, "Aseroid", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 0, 0, 0, 0, 0);
+AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 100, 200, MINING_RANGE, 0, 10, 1000);
+AddUnitTypeData(Type.Fighter, "Interceptor", "f", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 50, 250, TILE * 6, 5, 10, 1000);
+AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 60, 400, 700, 0, 0, 0, 0, 500);
+AddUnitTypeData(Type.ResourceNode, "Aseroid", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 1000, 0, 0, 0, 0, 0);
 
 var UNIT_ID = 0;
 var mouseX, mouseY, debugOutputElement, statusBarElement;
@@ -365,13 +365,7 @@ class UnitElement extends HTMLElement {
 			if (!this.isMoving) this.orderToPatrolInArea(); 
 		}
 
-		if (this.order == Order.Guard || this.order == Order.PatrolArea) {
-			const nearestUnit = FindNearestEnemyUnit(this, FIGHER_SEARCH_RANGE);
-			if (nearestUnit) this.orderMoveToAttackUnit(nearestUnit);
-			else this.resetToIdle();
-		}
-
-		if (this.order == Order.AttackMoveToPoint) {
+		if (this.order == Order.Guard || this.order == Order.AttackMoveToPoint || this.order == Order.PatrolArea) {
 			const nearestUnit = FindNearestEnemyUnit(this, FIGHER_SEARCH_RANGE);
 			if (nearestUnit) this.orderMoveToAttackUnit(nearestUnit);
 		}
@@ -424,10 +418,7 @@ function FindNearestUnitOfType(originUnitElm, type, searchRange, samePlayerRequi
 	.filter((unitElm) => { return samePlayerRequirement ? (originUnitElm.playerID == unitElm.playerID) : true })
 	.filter((unitElm) => { return  unitElm.type == type })
 	.filter((unitElm) => { return unitElm.distanceToUnit(originUnitElm) < searchRange })
-	.sort((a, b) => {
-		return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm);
-	})
-
+	.sort((a, b) => { return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm); })
 	if (nearestUnit.length == 0) return null;
 	else return nearestUnit[0];
 }
@@ -436,11 +427,8 @@ function FindNearestEnemyUnit(originUnitElm, searchRange) {
 	const nearestUnit = Array.from(GetAllUnits())
 	.filter((unitElm) => { return !unitElm.isNeutral && unitElm.playerID != originUnitElm.playerID })
 	.filter((unitElm) => { return unitElm.distanceToUnit(originUnitElm) < searchRange })
-	.sort((a, b) => {
-		return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm);
-	})
-	// TODO sort priority eg attackers first
-
+	.sort((a, b) => { return a.priority - b.priority; })
+	.sort((a, b) => { return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm); })
 	if (nearestUnit.length == 0) return null;
 	else return nearestUnit[0];
 }
@@ -487,7 +475,6 @@ document.addEventListener("DOMContentLoaded", evt => {
 	document.addEventListener("keyup", evt => {
 		Object.keys(UnitTypeData).forEach(key => {
 			if (evt.key.toLowerCase() == GetUnitTypeData(key).hotkey) {
-				// log(evt);
 				if (evt.shiftKey) {
 					CreateUnit(UnitTypeData[key].type, evt.ctrlKey ? PLAYER_ENEMY : PLAYER_HUMAN, mouseX, mouseY)
 				} else {
