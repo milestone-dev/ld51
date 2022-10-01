@@ -241,6 +241,10 @@ class UnitElement extends HTMLElement {
 		}
 	}
 
+	facePoint(x,y) {
+		const atan = Math.atan2(y - this.centerY, x - this.centerX) + Math.PI/2
+		this.style.transform = `rotate(${atan}rad)`;
+	}
 
 	harvestNearbyResources() {
 		var resourceNode = this.previousResourceNode;
@@ -288,6 +292,13 @@ class UnitElement extends HTMLElement {
 		if (this.type == Type.ResourceNode && this.remainingResources <= 0) {
 			this.remove();
 		}
+
+		var faceX = this.targetUnit ? this.targetUnit.centerX : this.targetX;
+		var faceY = this.targetUnit ? this.targetUnit.centerY : this.targetY;
+		if (faceX != Number.NaN && faceY != Number.NaN) {
+			this.facePoint(faceX, faceY);
+		}
+
 	}
 }
 
