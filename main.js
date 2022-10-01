@@ -296,7 +296,9 @@ function Tick(ms) {
 	const selectedUnits = GetSelectedUnits();
 	if (selectedUnits.length > 0) {
 		const unitElm = selectedUnits[0];
-		Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.resourceCarryAmount);
+		if (unitElm.type == Type.Harvester) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.resourceCarryAmount);
+		else if (unitElm.type == Type.ResourceNode) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.remainingResources);
+		else Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit);
 	}
 
 	window.requestAnimationFrame(Tick);
