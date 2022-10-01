@@ -46,12 +46,13 @@ const Type = {
 	ResourceNode: "ResourceNode",
 }
 const UnitTypeData = {};
-function AddUnitTypeData(type, name, hotkey, icon, size, cost, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax, elevation}; }
+function AddUnitTypeData(type, name, hotkey, icon, size, cost = 0, elevation = 0, buildTime = 0, hp = 1, priority = 0, moveSpeed = 0, attackRange = 0, attackDamage = 0, cooldownMax = 0) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, elevation, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax}; }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
-AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 100, 200, MINING_RANGE, 0, 10, 1000);
-AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 30, 100, 50, 250, TILE * 6, 5, 10, 1000);
-AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 60, 400, 700, 0, 0, 0, 0, 500);
-AddUnitTypeData(Type.ResourceNode, "Aseroid", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 1000, 0, 0, 0, 0, 0);
+AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, 50, 1000, 30, 100, 100, 200, MINING_RANGE, 0, 10);
+AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 1000, 30, 100, 50, 250, TILE * 6, 5, 10);
+AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 500, 60, 400, 700, 0, 0, 0, 0);
+AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", UNIT_SIZE_LARGE);
+AddUnitTypeData(Type.Powerup, "Precursor Artefact", "a", "🗿", UNIT_SIZE_SMALL);
 
 const GameEvent = {
 	NewResource: "NewResource",
@@ -121,7 +122,7 @@ class UnitElement extends HTMLElement {
 	Setup(type, playerID) {
 		this.id = `unit-${UNIT_ID++}`;
 		this.type = type;
-		if (type == Type.ResourceNode) playerID = PLAYER_NEUTRAL;
+		if (type == Type.ResourceNode || type == Type.Powerup) playerID = PLAYER_NEUTRAL;
 		this.playerID = playerID;
 		const data = GetUnitTypeData(this.type);
 		Object.keys(data).forEach(key => this[key] = data[key]);
@@ -174,7 +175,12 @@ class UnitElement extends HTMLElement {
 				this.harvestNearbyResources();
 			}
 		} else if (this.order == Order.MoveToFriendlyUnit && this.targetUnit) {
-			if (this.distanceToUnit(this.targetUnit) < STOPPING_RANGE) this.resetToIdle();
+			if (this.distanceToUnit(this.targetUnit) < STOPPING_RANGE) {
+				if (this.isHarvester && this.targetUnit.isPowerup) {
+					this.pickupUnit(this.targetUnit);
+				}
+				this.resetToIdle();
+			}
 		} else if (this.order == Order.MoveToAttackUnit && this.targetUnit) {
 			if (this.distanceToUnit(this.targetUnit) < this.attackRange) {
 				// this.stop();
@@ -184,7 +190,6 @@ class UnitElement extends HTMLElement {
 			// Pass
 		} else {
 			log("Did not manage order", this.order);
-			debugger;
 			this.resetToIdle();
 		}
 
@@ -223,6 +228,7 @@ class UnitElement extends HTMLElement {
 	get isMobile() {return this.moveSpeed > 0; }
 	get isNeutral() {return this.playerID == PLAYER_NEUTRAL; }
 	get isHarvester() {return this.type == Type.Harvester; }
+	get isPowerup() {return this.type == Type.Powerup; }
 	get isFighter() {return this.type == Type.Fighter; }
 	get isResourceNode() {return this.type == Type.ResourceNode; }
 	get isResoruceDepot() {return this.type == Type.ResourceDepot; }
@@ -360,6 +366,12 @@ class UnitElement extends HTMLElement {
 		} else {
 			log("Not enough resources for", unitType);
 		}
+	}
+
+	pickupUnit(unitElm) {
+		if (!unitElm.isPowerup) return;
+		// TODO add bonus for retrieval
+		unitElm.remove();
 	}
 
 	update() {
@@ -585,7 +597,6 @@ document.addEventListener("DOMContentLoaded", evt => {
 
 	document.addEventListener("contextmenu", evt => {
 		evt.preventDefault();
-		log(evt);
 		const targetUnitElm = evt.target;
 		GetSelectedUnits().forEach(unitElm => {
 			if (unitElm.isMobile) {
