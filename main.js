@@ -27,10 +27,9 @@ const UNIT_SIZE_LARGE = 64;
 const UNIT_SIZE_XLARGE = 128;
 const STOPPING_RANGE = 24;
 const MINING_RANGE = UNIT_SIZE_LARGE / 2;
-const MINING_SEARCH_RANGE = TILE * 12;
+const MINING_SEARCH_RANGE = TILE * 24;
 const PLAYER_NEUTRAL = 0;
 const PLAYER_HUMAN = 1;
-const UNDEFINED_NUMBER = 123456789;
 
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
@@ -38,7 +37,7 @@ const UnitTypeData = {};
 function AddUnit(type, name, hotkey, icon, size, hp, moveSpeed, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, hp, moveSpeed, elevation}; }
 AddUnit(Type.Harvester, "Miner Guy", "h", "👾", UNIT_SIZE_MEDIUM, 100, 200, 1000);
 AddUnit(Type.ResourceDepot, "Base", "b", "🛰", UNIT_SIZE_XLARGE, 100, 0, 500);
-AddUnit(Type.ResourceNode, "Resource", "r", "🪨", UNIT_SIZE_LARGE, 100, 0, 0);
+AddUnit(Type.ResourceNode, "Resource", "n", "🪨", UNIT_SIZE_LARGE, 100, 0, 0);
 
 
 var mouseX, mouseY, debugOutputElement, statusBarElement;
@@ -62,8 +61,8 @@ class UnitElement extends HTMLElement {
 		this.moveSpeed = 0;
 		this.hp = 1;
 		this.targetUnit = null;
-		this.targetX = UNDEFINED_NUMBER;
-		this.targetY = UNDEFINED_NUMBER;
+		this.targetX = Number.NaN;
+		this.targetY = Number.NaN;
 
 		// Harvester specific
 		this.resourceCarryAmount = 0;
@@ -85,10 +84,13 @@ class UnitElement extends HTMLElement {
 		if (this.order == Order.MoveToPoint) {
 			if (this.distanceToPoint(this.targetX, this.targetY) < STOPPING_RANGE) {
 				// console.log("Reached point, idling!");
-				this.order = Order.Idle;
+				this.resetToIdle();
 			}
-		} else if (this.order == Order.MoveToHarvestResourceNode && this.targetUnit) {
-			if (this.distanceToUnit(this.targetUnit) < MINING_RANGE) {
+		} else if (this.order == Order.MoveToHarvestResourceNode) {
+			if (!this.targetUnit || !this.targetUnit.isActive) {
+				console.log("Trying to move to a resource node that is gone. Looking for options...");
+				this.harvestNearbyResources();
+			} else if (this.distanceToUnit(this.targetUnit) < MINING_RANGE) {
 				console.log("Reached node, start harvesting!");
 				this.order = Order.HarvestResourceNode;
 				this.previousResourceNode = this.targetUnit;
@@ -100,21 +102,19 @@ class UnitElement extends HTMLElement {
 				// console.log("Reached depot, depositing resources and finding another resoruce!");
 				PlayerResources += this.resourceCarryAmount;
 				this.resourceCarryAmount = 0;
-				if (!this.previousResourceNode || this.previousResourceNode.remainingResources == 0) this.previousResourceNode = FindNearestUnitOfType(this, Type.ResourceNode, MINING_SEARCH_RANGE)
-				if (this.previousResourceNode) this.orderToHarvestResourceUnit(this.previousResourceNode);
-				else this.order = Order.Idle;
+				this.harvestNearbyResources();
 			}
 		} else if (this.order == Order.MoveToFriendlyUnit && this.targetUnit) {
-			if (this.distanceToUnit(this.targetUnit) < STOPPING_RANGE) this.order = Order.Idle;
+			if (this.distanceToUnit(this.targetUnit) < STOPPING_RANGE) this.resetToIdle();
 		} else if (this.order == Order.MoveToAttackUnit && this.targetUnit) {
 			console.log("TODO IMPLEMENT ATTACK RANGE LOGIC", this, this.targetUnit);
-			this.order = Order.Idle;
+			this.resetToIdle();
 		} else if (this.order == Order.HarvestResourceNode || this.order == Order.Idle) {
 			// Pass
 		} else {
 			console.log("Did not manage order", this.order);
 			debugger;
-			this.order = Order.Idle;
+			this.resetToIdle();
 		}
 
 	}
@@ -149,7 +149,14 @@ class UnitElement extends HTMLElement {
 	Move(x, y) {
 		this.style.left = px(x);
 		this.style.top = px(y);
-		console.log("move",x,y);
+	}
+
+	Awake() {
+		if (this.type == Type.Harvester) this.harvestNearbyResources();
+	}
+
+	get isActive() {
+		return this.parentNode != null;
 	}
 
 	get centerX() {
@@ -174,12 +181,18 @@ class UnitElement extends HTMLElement {
 		const r = this.getBoundingClientRect();
 		const distance = this.distanceToPoint(orderX,orderY);
 		const moveDuration = distance / this.moveSpeed;
-		console.log(distance);
 		this.style.transitionDuration = moveDuration + "s";
 		this.style.left = px(orderX - r.width/2);
 		this.style.top = px(orderY - r.height/2);
 		// this.offsetHeight;
-		console.log(orderX, orderY, moveDuration);
+	}
+
+	resetToIdle() {
+		this.targetUnit = null;
+		this.previousResourceNode = null;
+		this.targetX = Number.NaN;
+		this.targetY = Number.NaN;
+		this.order = Order.Idle;
 	}
 
 	orderMoveToPoint(targetX, targetY) {
@@ -228,18 +241,50 @@ class UnitElement extends HTMLElement {
 		}
 	}
 
+
+	harvestNearbyResources() {
+		var resourceNode = this.previousResourceNode;
+		if (!this.previousResourceNode || !this.previousResourceNode.isActive || this.previousResourceNode.remainingResources == 0) resourceNode = FindNearestUnitOfType(this, Type.ResourceNode, MINING_SEARCH_RANGE)
+		if (resourceNode) this.orderToHarvestResourceUnit(resourceNode);
+		else {
+			console.log("Unable to find nearby resources, idling.")
+			this.resetToIdle();
+		}
+		return resourceNode != null;
+	}
+
+	returnToNearbyDepot() {
+		const nearestDepot = FindNearestUnitOfType(this, Type.ResourceDepot, Infinity);
+		if (nearestDepot) this.orderToReturnResourcesToDepotUnit(nearestDepot);
+		else this.resetToIdle();
+		return nearestDepot != null;
+	}
+
 	update() {
-		if (this.order == Order.HarvestResourceNode && this.targetUnit && this.targetUnit.type == Type.ResourceNode) {
+		if (this.targetUnit && !this.targetUnit.isActive) this.targetUnit = null;
+		if (this.previousResourceNode && !this.previousResourceNode.isActive) this.previousResourceNode = null;
+
+		if (this.order == Order.HarvestResourceNode) {
 			// TODO implement timer
-			if (this.resourceCarryAmount >= RESOURCE_CARRY_AMOUNT_MAX) {
+
+			if (this.resourceCarryAmount < RESOURCE_CARRY_AMOUNT_MAX) {
+				// Can carry more resources, continue harvesting
+				if (this.targetUnit && this.targetUnit.isActive && this.targetUnit.type == Type.ResourceNode && this.targetUnit.remainingResources > 0) {
+					this.resourceCarryAmount += 1;
+					this.targetUnit.remainingResources -= 1;
+				} else {
+					// Look for more resources, otherwise return to home.
+					console.log("Tring to mine a resource node that is now gone, find another one");
+					if (!this.harvestNearbyResources() && this.resourceCarryAmount > 0) this.returnToNearbyDepot();
+				}
+			} else {
+				// Return home
 				const nearestDepot = FindNearestUnitOfType(this, Type.ResourceDepot, Infinity);
 				if (nearestDepot) this.orderToReturnResourcesToDepotUnit(nearestDepot);
-				else this.order = Order.Idle;
-			} else {
-				this.resourceCarryAmount += 1;
-				this.targetUnit.remainingResources -= 1;
+				else this.resetToIdle();
 			}
 		}
+
 		if (this.type == Type.ResourceNode && this.remainingResources <= 0) {
 			this.remove();
 		}
@@ -286,6 +331,7 @@ function CreateUnit(type, playerID,x, y) {
 	unitElm.Setup(type, playerID);
 	document.body.appendChild(unitElm);
 	unitElm.Move(x,y);
+	unitElm.Awake();
 }
 
 function Tick(ms) {
@@ -322,7 +368,6 @@ document.addEventListener("DOMContentLoaded", evt => {
 	});
 
 	document.addEventListener("contextmenu", evt => {
-		console.log(evt);
 		evt.preventDefault();
 		const targetUnitElm = evt.target;
 		GetSelectedUnits().forEach(unitElm => {
