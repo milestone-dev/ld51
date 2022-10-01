@@ -6,35 +6,33 @@ body {
 	font-family: sans-serif;
 	position: relative;
 	user-select: none;
-	width: 25600px;
-	height: 25600px;
 }
 
-x-unit {
-	position: absolute;
-	transition: top 1000s, left 1000s, rotate 1s;
-	transition-timing-function: linear;
+#world {
+	position: relative;
 }
 
-x-unit.selected {
-	outline: green solid 5px;
+#ui {
+	position: fixed;
+	background: red;
+	z-index: 9000;
+	top: 0;
+	left: 0;
 }
-
-x-unit.selected[data-player="0"] {outline-color: yellow; }
-x-unit.selected[data-player="2"] {outline-color: red; }
-
-x-unit[data-player="2"] {filter: hue-rotate(300deg) }
 
 #statusBar {
-	position: fixed;
+	position: absolute;
 	top: 10px;
 	left: 10px;
+	right: 10px;
+	width: 100%;
 	font-size: 18px;
 	font-family:  monospace;
+	white-space: nowrap;
 }
 
 #minimap {
-	position: fixed;
+	position: absolute;
 	top: 48px;
 	left: 0;
 	width: 128px;
@@ -87,3 +85,20 @@ x-unit[data-player="2"] {filter: hue-rotate(300deg) }
 	font-family:  monospace;
 	font-size: 12px;
 }
+
+
+x-unit {
+	position: absolute;
+	transition: top 1000s, left 1000s, rotate 1s;
+	transition-timing-function: linear;
+}
+
+x-unit.selected {
+	outline: green solid 5px;
+}
+
+x-unit.selected[data-player="0"] {outline-color: yellow; }
+x-unit.selected[data-player="2"] {outline-color: red; }
+
+x-unit[data-player="2"] {filter: hue-rotate(300deg) }
+

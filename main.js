@@ -52,7 +52,7 @@ AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE
 AddUnitTypeData(Type.ResourceNode, "Aseroid", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 1000, 0, 0, 0, 0, 0);
 
 var UNIT_ID = 0;
-var mouseX, mouseY, mouseDown, unitInfoElement, statusBarElement, minimapElement;
+var mouseX, mouseY, mouseDown, worldElement, uiElement, unitInfoElement, statusBarElement, minimapElement;
 var PlayerResources = [0, 0, 0, 0];
 const log = console.log;
 
@@ -392,9 +392,11 @@ function SetupGame() {
 	unitInfoElement = document.getElementById("unitInfo");
 	statusBarElement = document.getElementById("statusBar");
 	minimapElement = document.getElementById("minimap");
+	worldElement = document.getElementById("world");
+	uiElement = document.getElementById("ui");
 	customElements.define(UNIT_SELECTOR, UnitElement);
-	document.body.style.width = px(WORLD_SIZE * MINIMAP_SCALE);
-	document.body.style.height = px(WORLD_SIZE * MINIMAP_SCALE);
+	worldElement.style.width = px(WORLD_SIZE * MINIMAP_SCALE);
+	worldElement.style.height = px(WORLD_SIZE * MINIMAP_SCALE);
 	PlayerResources[PLAYER_HUMAN] = 100;
 	window.setInterval(UpdateMinimap, 100);
 	UpdateMinimap();
@@ -444,7 +446,7 @@ function FindNearestEnemyUnit(originUnitElm, searchRange) {
 function CreateUnit(type, playerID,x, y) {
 	const unitElm = document.createElement(UNIT_SELECTOR);
 	unitElm.Setup(type, playerID);
-	document.body.appendChild(unitElm);
+	worldElement.appendChild(unitElm);
 	unitElm.Move(x,y);
 	unitElm.Awake();
 }
