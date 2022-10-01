@@ -63,6 +63,9 @@ const GameEvent = {
 	IonStorm: "IonStorm",
 	Artefact: "Artefact",
 	Reinforcements: "Reinforcements",
+	MoraleBoost: "MoraleBoost",
+	MoraleLoss: "MoraleLoss",
+	NetworkError: "NetworkError",
 } 
 const GameEventData = {}
 var GameEvents = [];
@@ -77,6 +80,9 @@ AddGameEventData(GameEvent.WarpRift, "Brace for warp rift", 10);
 AddGameEventData(GameEvent.IonStorm, "Brace for incoming Ion storm", 10);
 AddGameEventData(GameEvent.Artefact, "Precursor Artefact has been discoreved", 10);
 AddGameEventData(GameEvent.Reinforcements, "Reinforcements have arrived", 10);
+AddGameEventData(GameEvent.MoraleBoost, "Morale is surging. Worker speed increased by 10%.", 10);
+AddGameEventData(GameEvent.MoraleLoss, "Worker morale has taken a hit. Worker speed decreased by 20%", 10);
+AddGameEventData(GameEvent.NetworkError, "A long range frequency network outage has been discovered.", 10);
 
 var UNIT_ID = 0;
 var mouseX, mouseY, mouseDown, worldElement, uiElement, unitInfoElement, statusBarElement, minimapElement, eventInfoElement;
@@ -141,7 +147,7 @@ class UnitElement extends HTMLElement {
 	}
 
 	onTransitionEnd(evt) {
-		console.log("onTransitionEnd", this.order);
+		// console.log("onTransitionEnd", this.order);
 		this.isMoving = false;
 
 		if (this.order == Order.MoveToPoint) {
@@ -151,10 +157,10 @@ class UnitElement extends HTMLElement {
 			}
 		} else if (this.order == Order.MoveToHarvestResourceNode) {
 			if (!this.targetUnit || !this.targetUnit.isActive) {
-				log("Trying to move to a resource node that is gone. Looking for options...");
+				// log("Trying to move to a resource node that is gone. Looking for options...");
 				this.harvestNearbyResources();
 			} else if (this.distanceToUnit(this.targetUnit) < MINING_RANGE) {
-				log("Reached node, start harvesting!");
+				// log("Reached node, start harvesting!");
 				this.order = Order.HarvestResourceNode;
 				this.previousResourceNode = this.targetUnit;
 			}
@@ -178,6 +184,7 @@ class UnitElement extends HTMLElement {
 			// Pass
 		} else {
 			log("Did not manage order", this.order);
+			debugger;
 			this.resetToIdle();
 		}
 
