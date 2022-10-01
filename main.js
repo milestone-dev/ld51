@@ -17,7 +17,7 @@ const Order = {
 	ReturnResourcesInResourceDepot: "ReturnResourcesInResourceDepot",
 	Guard: "Guard",
 	MoveToAttackUnit: "MoveToAttackUnit",
-	AttackToPoint: "AttackToPoint",
+	AttackMoveToPoint: "AttackMoveToPoint",
 	AttackUnit: "AttackUnit",
 	PatrolArea: "PatrolArea",
 }
@@ -36,6 +36,7 @@ const FIGHER_SEARCH_RANGE = TILE * 10;
 const PLAYER_NEUTRAL = 0;
 const PLAYER_HUMAN = 1;
 const PLAYER_ENEMY = 2;
+const PATROL_RANGE = TILE;
 
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
@@ -43,7 +44,7 @@ const UnitTypeData = {};
 function AddUnitTypeData(type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, attackRange, attackDamage, cooldownMax, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, attackRange, attackDamage, cooldownMax, elevation}; }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
 AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 200, MINING_RANGE, 0, 10, 1000);
-AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 30, 100, 250, TILE * 6, 5, 10, 1000);
+AddUnitTypeData(Type.Fighter, "Interceptor", "f", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 250, TILE * 6, 5, 10, 1000);
 AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 60, 100, 0, 0, 0, 0, 500);
 AddUnitTypeData(Type.ResourceNode, "Aseroid", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 0, 0, 0, 0, 0);
 
@@ -97,7 +98,6 @@ class UnitElement extends HTMLElement {
 		this.dataset.type = this.type;
 		this.dataset.player = this.playerID;
 		this.cooldown = 0;
-		log(this);
 	}
 
 	toString() {
@@ -139,11 +139,10 @@ class UnitElement extends HTMLElement {
 			if (this.distanceToUnit(this.targetUnit) < STOPPING_RANGE) this.resetToIdle();
 		} else if (this.order == Order.MoveToAttackUnit && this.targetUnit) {
 			if (this.distanceToUnit(this.targetUnit) < this.attackRange) {
-				// log("TODO IMPLEMENT ATTACK RANGE LOGIC", this, this.targetUnit);
 				// this.stop();
 				this.order = Order.AttackUnit;
 			}
-		} else if (this.order == Order.HarvestResourceNode || this.order == Order.AttackUnit || this.order == Order.Idle) {
+		} else if (this.order == Order.HarvestResourceNode || this.order == Order.AttackUnit || this.order == Order.Idle || this.order == Order.PatrolArea) {
 			// Pass
 		} else {
 			log("Did not manage order", this.order);
@@ -223,6 +222,14 @@ class UnitElement extends HTMLElement {
 		this.travelToPoint(targetX, targetY);
 	}
 
+	orderAttackMoveToPoint(targetX, targetY) {
+		this.targetUnit = null;
+		this.order = Order.AttackMoveToPoint;
+		this.targetX = targetX;
+		this.targetY = targetY;
+		this.travelToPoint(targetX, targetY);
+	}
+
 	// TODO dedup
 	orderToHarvestResourceUnit(targetUnit) {
 		this.targetUnit = targetUnit;
@@ -246,6 +253,13 @@ class UnitElement extends HTMLElement {
 		this.targetUnit = targetUnit;
 		this.order = Order.MoveToAttackUnit;
 		this.travelToPoint(targetUnit.centerX, targetUnit.centerY);
+	}
+
+	orderToPatrolInArea() {
+		this.order = Order.PatrolArea;
+		const x = this.centerX - PATROL_RANGE + Math.random()*PATROL_RANGE;
+		const y = this.centerY - PATROL_RANGE + Math.random()*PATROL_RANGE;
+		this.travelToPoint(x, y);
 	}
 
 	orderInteractWithUnit(targetUnit) {
@@ -347,20 +361,24 @@ class UnitElement extends HTMLElement {
 			} else this.resetToIdle();
 		}
 
+		if (this.order == Order.PatrolArea) {
+			if (!this.isMoving) this.orderToPatrolInArea(); 
+		}
 
-		if (this.order == Order.Guard) {
+		if (this.order == Order.Guard || this.order == Order.PatrolArea) {
 			const nearestUnit = FindNearestEnemyUnit(this, FIGHER_SEARCH_RANGE);
 			if (nearestUnit) this.orderMoveToAttackUnit(nearestUnit);
 			else this.resetToIdle();
 		}
 
+		if (this.order == Order.AttackMoveToPoint) {
+			const nearestUnit = FindNearestEnemyUnit(this, FIGHER_SEARCH_RANGE);
+			if (nearestUnit) this.orderMoveToAttackUnit(nearestUnit);
+		}
+
 		if (this.isResourceNode && this.remainingResources <= 0) {
 			this.destroy();
 		}
-
-
-
-		
 
 		if (this.isMobile) {
 			var faceX = this.targetUnit ? this.targetUnit.centerX : this.targetX;
@@ -483,10 +501,14 @@ document.addEventListener("DOMContentLoaded", evt => {
 
 	document.addEventListener("contextmenu", evt => {
 		evt.preventDefault();
+		log(evt);
 		const targetUnitElm = evt.target;
 		GetSelectedUnits().forEach(unitElm => {
 			if (unitElm.isMobile) {
-				if (!evt.target || !UnitElement.isElementUnit(evt.target)) unitElm.orderMoveToPoint(evt.pageX, evt.pageY);
+				if (!evt.target || !UnitElement.isElementUnit(evt.target)) {
+					if (evt.ctrlKey) unitElm.orderAttackMoveToPoint(evt.pageX, evt.pageY);
+ 					else unitElm.orderMoveToPoint(evt.pageX, evt.pageY);
+				}
 				else unitElm.orderInteractWithUnit(evt.target);
 			}
 		})
