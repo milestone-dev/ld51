@@ -165,3 +165,34 @@ x-sprite.explosion {
     transform: scale(10%);
   }
 }
+
+
+x-overlay {
+	display: none;
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	left: 0;
+	outline: 10px solid rgba(75, 75, 255, 0.05);
+}
+
+body.showPowerRange x-overlay,
+x-unit.selected x-overlay {
+	display: block;
+}
+
+#buildingPlacementGhost {
+	display: none;
+	background: rgba(255,0,0, 0.1);;
+	position: absolute;
+	width: 32px;
+	height: 32px;
+	top: 0;
+	left: 0;
+}
+#buildingPlacementGhost.visible {
+	display: block;
+}
+#buildingPlacementGhost.valid {
+	background-color: rgba(255,255,255, 0.1);
+}

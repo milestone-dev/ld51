@@ -19,6 +19,7 @@ const Order = {
 
 const UNIT_SELECTOR = "x-unit";
 const SPRITE_SELECTOR = "x-sprite";
+const OVERLAY_SELECTOR = "x-overlay";
 const TILE = 32;
 const UNIT_SIZE_SMALL = 24;
 const UNIT_SIZE_MEDIUM = 48;
@@ -41,11 +42,12 @@ const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
 const Type = {
 	Undefined: "Undefined",
-	Harvester: "Harvester",
-	Fighter: "Fighter",
+	ResourceNode: "ResourceNode",
 	ResourceDepot: "ResourceDepot",
 	StaticDefense: "StaticDefense",
-	ResourceNode: "ResourceNode",
+	PowerExtender: "PowerExtender",
+	Harvester: "Harvester",
+	Fighter: "Fighter",
 }
 const UnitTypeData = {};
 // function AddUnitTypeData(type, name, hotkey, icon, size, cost = 0, elevation = 0, buildTime = 0, hp = 1, priority = 0, powerRange = 0, moveSpeed = 0, attackRange = 0, attackDamage = 0, cooldownMax = 0) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, elevation, buildTime, hp, priority, powerRange, moveSpeed, attackRange, attackDamage, cooldownMax}; }
@@ -57,8 +59,9 @@ function AddUnitTypeData(type, name, hotkey, icon, size, data = {}) {
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
 AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, moveSpeed:200, attackRange:MINING_RANGE, cooldownMax:10});
 AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, moveSpeed:200, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
-AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, {cost:400, elevation:500, buildTime:30, hp:1000, priority:300});
-AddUnitTypeData(Type.StaticDefense, "Tesla Coil", "t", "🗼", UNIT_SIZE_MEDIUM, {cost:400, elevation:500, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
+AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, {isBuilding:true, cost:400, elevation:500, buildTime:30, hp:1000, priority:300, powerRange:TILE*10});
+AddUnitTypeData(Type.StaticDefense, "Tesla Coil", "t", "🗼", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:400, elevation:500, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
+AddUnitTypeData(Type.PowerExtender, "Pylon", "y", "📍", UNIT_SIZE_MEDIUM, {isBuilding: true, cost:100, elevation:500, buildTime:30, hp:200, priority:100, powerRange:TILE*8});
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", UNIT_SIZE_LARGE);
 AddUnitTypeData(Type.Powerup, "Precursor Artefact", "a", "🗿", UNIT_SIZE_SMALL);
 
@@ -94,16 +97,20 @@ AddGameEventData(GameEvent.MoraleLoss, "Worker morale has taken a hit. Worker sp
 AddGameEventData(GameEvent.NetworkError, "A long range frequency network outage has been discovered.", 10);
 
 var UNIT_ID = 0;
-var mouseX, mouseY, mouseDown, worldElement, uiElement, unitInfoElement, statusBarElement, minimapElement, eventInfoElement;
+var mouseX, mouseY, mouseDown, mousePlaceX, mousePlaceY;
+var worldElement, uiElement, unitInfoElement, statusBarElement, minimapElement, eventInfoElement, buildingPlacementGhostElement;
 var PlayerResources = [0, 0, 0, 0];
 var eventInterval;
-var HumanPlayerTownHall;
+var HumanPlayerTownHall = null;
+var CurrentBuildingPlaceType = null;
+var CurrentBuildingPlacemenValid = false;
 
 const log = console.log;
 
 function px(i) {return i+"px"};
 
 class SpriteElement extends HTMLElement {}
+class OverlayElement extends HTMLElement {}
 
 class UnitElement extends HTMLElement {
 
@@ -137,8 +144,8 @@ class UnitElement extends HTMLElement {
 		this.playerID = playerID;
 		const data = GetUnitTypeData(this.type);
 		Object.keys(data).forEach(key => this[key] = data[key]);
-		this.style.width = data.size;
-		this.style.height = data.size;
+		this.style.width = px(data.size);
+		this.style.height = px(data.size);
 		this.style.lineHeight = px(data.size);
 		this.style.fontSize = px(data.size);
 		this.style.zIndex = data.elevation;
@@ -148,6 +155,15 @@ class UnitElement extends HTMLElement {
 		this.dataset.type = this.type;
 		this.dataset.player = this.playerID;
 		this.cooldown = 0;
+
+		if (this.powerRange && this.powerRange > 0) {
+			const overlayElm = document.createElement(OVERLAY_SELECTOR);
+			overlayElm.style.width = px(this.powerRange*2);
+			overlayElm.style.height = px(this.powerRange*2);
+			overlayElm.style.top = px(-(this.powerRange-this.size/2));
+			overlayElm.style.left = px(-(this.powerRange-this.size/2));
+			this.appendChild(overlayElm);
+		}
 	}
 
 	toString() {
@@ -244,6 +260,17 @@ class UnitElement extends HTMLElement {
 	get isStaticDefense() {return this.type == Type.StaticDefense; }
 	get isResourceNode() {return this.type == Type.ResourceNode; }
 	get isResoruceDepot() {return this.type == Type.ResourceDepot; }
+	get providesPower() {return this.powerRange > 0; }
+	get requiresPower() {return this.isBuilding; }
+
+	providesPowerAtPoint(x, y) {
+		if (!this.providesPower) return false;
+		const xMin = this.centerX - this.powerRange;
+		const xMax = this.centerX + this.powerRange;
+		const yMin = this.centerY - this.powerRange;
+		const yMax = this.centerY + this.powerRange;
+		return (x >= xMin && x <= xMax && y >= yMin && y <= yMax);
+	}
 
 	distanceToPoint(x, y) { return Math.sqrt(Math.pow((this.centerX - x), 2) + Math.pow((this.centerY - y), 2)); }
 	distanceToUnit(unitElm) { return this.distanceToPoint(unitElm.centerX, unitElm.centerY); }
@@ -376,7 +403,7 @@ class UnitElement extends HTMLElement {
 			PlayerResources[this.playerID] -= data.cost
 			CreateUnit(unitType, this.playerID, this.centerX, this.centerY);
 		} else {
-			log("Not enough resources for", unitType);
+			DisplayErrorMessage("Not enough resources");
 		}
 	}
 
@@ -473,8 +500,10 @@ function SetupGame() {
 	worldElement = document.getElementById("world");
 	uiElement = document.getElementById("ui");
 	eventInfoElement = document.getElementById("eventInfo");
+	buildingPlacementGhostElement = document.getElementById("buildingPlacementGhost");
 	customElements.define(UNIT_SELECTOR, UnitElement);
 	customElements.define(SPRITE_SELECTOR, SpriteElement);
+	customElements.define(OVERLAY_SELECTOR, OverlayElement);
 	worldElement.style.width = px(WORLD_SIZE);
 	worldElement.style.height = px(WORLD_SIZE);
 	PlayerResources[PLAYER_HUMAN] = 100;
@@ -517,6 +546,13 @@ function DeselectAllUnits() {
 	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.classList.remove("selected"));
 }
 
+function GetAllPowerGenerators(playerID) {
+	const units = Array.from(GetAllUnits())
+	.filter((unitElm) => { return unitElm.playerID == playerID})
+	.filter((unitElm) => { return unitElm.providesPower});
+	return units;
+}
+
 function FindNearestUnitOfType(originUnitElm, type, searchRange, samePlayerRequirement = false) {
 	const nearestUnit = Array.from(GetAllUnits())
 	.filter((unitElm) => { return samePlayerRequirement ? (originUnitElm.playerID == unitElm.playerID) : true })
@@ -537,13 +573,33 @@ function FindNearestEnemyUnit(originUnitElm, searchRange) {
 	else return nearestUnit[0];
 }
 
-function CreateUnit(type, playerID,x, y) {
+function CreateUnit(type, playerID, x, y) {
 	const unitElm = document.createElement(UNIT_SELECTOR);
 	unitElm.Setup(type, playerID);
 	worldElement.appendChild(unitElm);
 	unitElm.Move(x,y);
 	unitElm.Awake();
 	return unitElm;
+}
+
+function DisplayErrorMessage(message) {
+	log(message);
+}
+
+function ConstructBuilding(type, playerID, x, y) {
+	const unitData = GetUnitTypeData(type);
+	if (PlayerResources[playerID] < unitData.cost) {
+		DisplayErrorMessage("Not enough resources");
+		return false;
+	}
+	var powered = GetAllPowerGenerators(playerID).some(elm => {return elm.providesPowerAtPoint(x,y)});
+	if (!powered) {
+		DisplayErrorMessage("Need to place in powered area");
+		return false;
+	}
+	PlayerResources[playerID] -= unitData.cost;
+	CreateUnit(type, playerID, x, y);
+	return true;
 }
 
 function CreateUnitsInArea(num, type, playerID, x, y) {
@@ -600,6 +656,16 @@ function CreateNewGameEvent(id = null) {
 function Tick(ms) {
 	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.update());
 
+
+	document.body.classList.toggle("showPowerRange", CurrentBuildingPlaceType);
+	buildingPlacementGhostElement.classList.toggle("visible", CurrentBuildingPlaceType);
+	if (CurrentBuildingPlaceType) {
+		CurrentBuildingPlacemenValid = GetAllPowerGenerators(PLAYER_HUMAN).some(elm => {return elm.providesPowerAtPoint(mousePlaceX,mousePlaceY)});
+		buildingPlacementGhostElement.classList.toggle("valid", CurrentBuildingPlacemenValid);
+		buildingPlacementGhostElement.style.left = px(mousePlaceX);
+		buildingPlacementGhostElement.style.top = px(mousePlaceY);
+	}
+
 	statusBarElement.innerText = `💎 ${PlayerResources[PLAYER_HUMAN]}`;
 
 	const selectedUnits = GetSelectedUnits();
@@ -618,6 +684,14 @@ document.addEventListener("DOMContentLoaded", evt => {
 
 	document.addEventListener("click", evt => {
 		if (!evt.target) return;
+
+		if (CurrentBuildingPlaceType) {
+			if (ConstructBuilding(CurrentBuildingPlaceType, PLAYER_HUMAN, mousePlaceX, mousePlaceY)) {
+				CurrentBuildingPlaceType = null;	
+			}
+			return;
+		}
+
 		if (UnitElement.isElementUnit(evt.target)) {
 			if (!evt.shiftKey) DeselectAllUnits();
 			evt.target.select();
@@ -634,6 +708,8 @@ document.addEventListener("DOMContentLoaded", evt => {
 	document.addEventListener("mousemove", evt => {
 		mouseX = evt.pageX;
 		mouseY = evt.pageY;
+		mousePlaceX = Math.floor(mouseX/TILE)*TILE;
+		mousePlaceY = Math.floor(mouseY/TILE)*TILE;
 
 		// if (mouseDown && evt.target == minimapElement) {
 		// 	window.scrollX = evt.offsetX * MINIMAP_SCALE;
@@ -644,14 +720,19 @@ document.addEventListener("DOMContentLoaded", evt => {
 	})
 
 	document.addEventListener("keyup", evt => {
-		Object.keys(UnitTypeData).forEach(key => {
-			if (evt.key.toLowerCase() == GetUnitTypeData(key).hotkey) {
-				if (evt.shiftKey) {
-					CreateUnit(UnitTypeData[key].type, evt.ctrlKey ? PLAYER_ENEMY : PLAYER_HUMAN, mouseX, mouseY)
+		Object.keys(UnitTypeData).forEach(type => {
+			if (evt.key.toLowerCase() == GetUnitTypeData(type).hotkey) {
+				const data = GetUnitTypeData(type);
+				if (data.isBuilding) {
+					CurrentBuildingPlaceType = type;
 				} else {
-					const selectedUnit = GetSelectedUnit();
-					if (selectedUnit) selectedUnit.trainUnit(UnitTypeData[key].type);
-					else log("No selected unit. Hold shift to spawn");
+					if (evt.shiftKey) {
+						CreateUnit(type, evt.ctrlKey ? PLAYER_ENEMY : PLAYER_HUMAN, mouseX, mouseY)
+					} else {
+						const selectedUnit = GetSelectedUnit();
+						if (selectedUnit) selectedUnit.trainUnit(UnitTypeData[type].type);
+						else log("No selected unit. Hold shift to spawn");
+					}
 				}
 			}
 		});
@@ -659,6 +740,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 
 	document.addEventListener("contextmenu", evt => {
 		evt.preventDefault();
+		if (CurrentBuildingPlaceType) CurrentBuildingPlaceType = null;
 		const targetUnitElm = evt.target;
 		GetSelectedUnits().forEach(unitElm => {
 			if (unitElm.isMobile) {
