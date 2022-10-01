@@ -20,12 +20,14 @@ const Order = {
 
 
 const UNIT_SELECTOR = "x-unit";
+const TILE = 32;
 const UNIT_SIZE_SMALL = 24;
 const UNIT_SIZE_MEDIUM = 48;
 const UNIT_SIZE_LARGE = 64;
 const UNIT_SIZE_XLARGE = 128;
 const STOPPING_RANGE = 24;
 const MINING_RANGE = UNIT_SIZE_LARGE / 2;
+const MINING_SEARCH_RANGE = TILE * 12;
 const PLAYER_NEUTRAL = 0;
 const PLAYER_HUMAN = 1;
 const UNDEFINED_NUMBER = 123456789;
@@ -98,7 +100,7 @@ class UnitElement extends HTMLElement {
 				// console.log("Reached depot, depositing resources and finding another resoruce!");
 				PlayerResources += this.resourceCarryAmount;
 				this.resourceCarryAmount = 0;
-				if (!this.previousResourceNode || this.previousResourceNode.remainingResources == 0) this.previousResourceNode = FindNearestUnitOfType(this, Type.ResourceNode)
+				if (!this.previousResourceNode || this.previousResourceNode.remainingResources == 0) this.previousResourceNode = FindNearestUnitOfType(this, Type.ResourceNode, MINING_SEARCH_RANGE)
 				if (this.previousResourceNode) this.orderToHarvestResourceUnit(this.previousResourceNode);
 				else this.order = Order.Idle;
 			}
@@ -230,7 +232,7 @@ class UnitElement extends HTMLElement {
 		if (this.order == Order.HarvestResourceNode && this.targetUnit && this.targetUnit.type == Type.ResourceNode) {
 			// TODO implement timer
 			if (this.resourceCarryAmount >= RESOURCE_CARRY_AMOUNT_MAX) {
-				const nearestDepot = FindNearestUnitOfType(this, Type.ResourceDepot);
+				const nearestDepot = FindNearestUnitOfType(this, Type.ResourceDepot, Infinity);
 				if (nearestDepot) this.orderToReturnResourcesToDepotUnit(nearestDepot);
 				else this.order = Order.Idle;
 			} else {
@@ -267,11 +269,12 @@ function DeselectAllUnits() {
 	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.classList.remove("selected"));
 }
 
-function FindNearestUnitOfType(unitElm, type) {
+function FindNearestUnitOfType(originUnitElm, type, searchRange) {
 	const nearestDepot = Array.from(GetAllUnits())
-	.filter((unitElm) => { return unitElm.type == type})
+	.filter((unitElm) => { return unitElm.type == type })
+	.filter((unitElm) => { return unitElm.distanceToUnit(originUnitElm) < searchRange })
 	.sort((a, b) => {
-		return a.distanceToUnit(unitElm) - b.distanceToUnit(unitElm);
+		return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm);
 	})
 
 	if (nearestDepot.length == 0) return null;
