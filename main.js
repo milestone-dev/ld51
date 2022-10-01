@@ -1,6 +1,7 @@
 const Type = {
 	Undefined: "Undefined",
 	Harvester: "Harvester",
+	Fighter: "Fighter",
 	ResourceDepot: "ResourceDepot",
 	ResourceNode: "ResourceNode",
 }
@@ -34,10 +35,12 @@ const PLAYER_HUMAN = 1;
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
 const UnitTypeData = {};
-function AddUnit(type, name, hotkey, icon, size, hp, moveSpeed, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, hp, moveSpeed, elevation}; }
-AddUnit(Type.Harvester, "Miner Guy", "h", "👾", UNIT_SIZE_MEDIUM, 100, 200, 1000);
-AddUnit(Type.ResourceDepot, "Base", "b", "🛰", UNIT_SIZE_XLARGE, 100, 0, 500);
-AddUnit(Type.ResourceNode, "Resource", "n", "🪨", UNIT_SIZE_LARGE, 100, 0, 0);
+function AddUnitTypeData(type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, buildTime, hp, moveSpeed, elevation}; }
+function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
+AddUnitTypeData(Type.Harvester, "Miner Guy", "h", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 200, 1000);
+AddUnitTypeData(Type.Fighter, "Fighter", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 30, 100, 250, 1000);
+AddUnitTypeData(Type.ResourceDepot, "Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 60, 100, 0, 500);
+AddUnitTypeData(Type.ResourceNode, "Resource", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 0, 0);
 
 
 var mouseX, mouseY, debugOutputElement, statusBarElement;
@@ -67,7 +70,7 @@ class UnitElement extends HTMLElement {
 		// Harvester specific
 		this.resourceCarryAmount = 0;
 		this.previousResourceNode = null;
-		this.remainingResources = 100; // TODO move to data
+		this.remainingResources = 6000; // TODO move to data
 	}
 
 	toString() {
@@ -131,7 +134,7 @@ class UnitElement extends HTMLElement {
 	Setup(type, playerID) {
 		this.type = type;
 		this.playerID = playerID;
-		const data = UnitTypeData[this.type];
+		const data = GetUnitTypeData(this.type);
 		this.name = data.name;
 		this.style.width = data.size;
 		this.style.height = data.size;
@@ -264,6 +267,17 @@ class UnitElement extends HTMLElement {
 		return nearestDepot != null;
 	}
 
+	trainUnit(unitType) {
+		//For now all units can train all units
+		const data = GetUnitTypeData(unitType);
+		if (PlayerResources >= data.cost) {
+			PlayerResources -= data.cost
+			CreateUnit(unitType, this.playerID, this.centerX, this.centerY);
+		} else {
+			console.log("Not enough resources for", unitType);
+		}
+	}
+
 	update() {
 		if (this.targetUnit && !this.targetUnit.isActive) this.targetUnit = null;
 		if (this.previousResourceNode && !this.previousResourceNode.isActive) this.previousResourceNode = null;
@@ -315,6 +329,10 @@ function Log(...args) {
 
 function GetSelectedUnits() {
 	return document.querySelectorAll(UNIT_SELECTOR+".selected");
+}
+
+function GetSelectedUnit() {
+	return document.querySelector(UNIT_SELECTOR+".selected");
 }
 
 function GetAllUnits() {
@@ -375,7 +393,18 @@ document.addEventListener("DOMContentLoaded", evt => {
 	})
 
 	document.addEventListener("keyup", evt => {
-		Object.keys(UnitTypeData).forEach(key => { if (evt.key == UnitTypeData[key].hotkey) CreateUnit(UnitTypeData[key].type, PLAYER_HUMAN, mouseX, mouseY); });
+		Object.keys(UnitTypeData).forEach(key => {
+			if (evt.key == GetUnitTypeData(key).hotkey) {
+				// console.log(evt);
+				if (evt.ctrlKey) {
+					CreateUnit(UnitTypeData[key].type, PLAYER_HUMAN, mouseX, mouseY)
+				} else {
+					const selectedUnit = GetSelectedUnit();
+					if (selectedUnit) selectedUnit.trainUnit(UnitTypeData[key].type);
+					else console.log("No selected unit. Hold ctrl to spawn");
+				}
+			}
+		});
 	});
 
 	document.addEventListener("contextmenu", evt => {
