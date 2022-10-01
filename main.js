@@ -37,6 +37,9 @@ const PLAYER_NEUTRAL = 0;
 const PLAYER_HUMAN = 1;
 const PLAYER_ENEMY = 2;
 const PATROL_RANGE = TILE;
+const MINIMAP_SCALE = 64;
+const WORLD_SIZE = 128;
+
 
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
@@ -44,12 +47,12 @@ const UnitTypeData = {};
 function AddUnitTypeData(type, name, hotkey, icon, size, cost, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax, elevation}; }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
 AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 100, 200, MINING_RANGE, 0, 10, 1000);
-AddUnitTypeData(Type.Fighter, "Interceptor", "f", "👾", UNIT_SIZE_MEDIUM, 50, 30, 100, 50, 250, TILE * 6, 5, 10, 1000);
+AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 30, 100, 50, 250, TILE * 6, 5, 10, 1000);
 AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 60, 400, 700, 0, 0, 0, 0, 500);
 AddUnitTypeData(Type.ResourceNode, "Aseroid", "n", "🪨", UNIT_SIZE_LARGE, 0, 0, 100, 1000, 0, 0, 0, 0, 0);
 
 var UNIT_ID = 0;
-var mouseX, mouseY, debugOutputElement, statusBarElement;
+var mouseX, mouseY, mouseDown, unitInfoElement, statusBarElement, minimapElement;
 var PlayerResources = [0, 0, 0, 0];
 const log = console.log;
 
@@ -172,12 +175,12 @@ class UnitElement extends HTMLElement {
 
 	get centerX() {
 		const r = this.getBoundingClientRect();
-		return r.x + r.width/2;
+		return r.x + window.scrollX + r.width/2;
 	}
 
 	get centerY() {
 		const r = this.getBoundingClientRect();
-		return r.y + r.width/2;
+		return r.y + window.scrollY + r.width/2;
 	}
 
 	get isActive() {return this.parentNode != null; }
@@ -280,8 +283,8 @@ class UnitElement extends HTMLElement {
 		const distance = 0;
 		const moveDuration = distance / this.moveSpeed;
 		this.style.transitionDuration = moveDuration + "s";
-		this.style.left = px(r.x - r.width/2);
-		this.style.top = px(r.y - r.height/2);
+		this.style.left = px(r.x - r.width/2); // window.scrollX
+		this.style.top = px(r.y - r.height/2); // window.scrollY
 	}
 
 	destroy() {
@@ -386,15 +389,20 @@ class UnitElement extends HTMLElement {
 }
 
 function SetupGame() {
-	debugOutputElement = document.getElementById("debugOutput");
+	unitInfoElement = document.getElementById("unitInfo");
 	statusBarElement = document.getElementById("statusBar");
+	minimapElement = document.getElementById("minimap");
 	customElements.define(UNIT_SELECTOR, UnitElement);
-	window.requestAnimationFrame(Tick);
+	document.body.style.width = px(WORLD_SIZE * MINIMAP_SCALE);
+	document.body.style.height = px(WORLD_SIZE * MINIMAP_SCALE);
 	PlayerResources[PLAYER_HUMAN] = 100;
+	window.setInterval(UpdateMinimap, 100);
+	UpdateMinimap();
+	window.requestAnimationFrame(Tick);
 }
 
 function Log(...args) {
-	debugOutputElement.innerHTML = args.join("<br>");
+	unitInfoElement.innerHTML = args.join("<br>");
 }
 
 function GetSelectedUnits() {
@@ -441,10 +449,30 @@ function CreateUnit(type, playerID,x, y) {
 	unitElm.Awake();
 }
 
+function UpdateMinimap() {
+	minimapElement.innerHTML = "";
+	GetAllUnits().forEach(unitElm => {
+		const mElm = document.createElement("div");
+
+		mElm.style.left = px(unitElm.centerX/MINIMAP_SCALE);
+		mElm.style.top = px(unitElm.centerY/MINIMAP_SCALE);
+		mElm.className = unitElm.className;
+		mElm.dataset.player = unitElm.dataset.player;
+		minimapElement.appendChild(mElm);
+	});
+
+	const viewportElm = document.createElement("span");
+	viewportElm.style.left = px(window.scrollX/MINIMAP_SCALE);
+	viewportElm.style.top = px(window.scrollY/MINIMAP_SCALE);
+	viewportElm.style.width = px(window.innerWidth/MINIMAP_SCALE);
+	viewportElm.style.height = px(window.innerHeight/MINIMAP_SCALE);
+	minimapElement.appendChild(viewportElm);
+}
+
 function Tick(ms) {
 	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.update());
 
-	statusBarElement.innerText = `Resources: ${PlayerResources[PLAYER_HUMAN]}`;
+	statusBarElement.innerText = `💎 ${PlayerResources[PLAYER_HUMAN]}`;
 
 	const selectedUnits = GetSelectedUnits();
 	if (selectedUnits.length > 0) {
@@ -455,21 +483,36 @@ function Tick(ms) {
 		else if (!unitElm.isMobile) Log(unitElm, `${unitElm.hp} hp`, unitElm.order);
 		else Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit);
 	}
-
 	window.requestAnimationFrame(Tick);
 }
 
 document.addEventListener("DOMContentLoaded", evt => {
 
 	document.addEventListener("click", evt => {
-		if (!evt.target || !UnitElement.isElementUnit(evt.target)) return;
-		if (!evt.shiftKey) DeselectAllUnits();
-		evt.target.select();
+		if (!evt.target) return;
+		if (UnitElement.isElementUnit(evt.target)) {
+			if (!evt.shiftKey) DeselectAllUnits();
+			evt.target.select();
+		} else if (evt.target == minimapElement) {
+			window.scrollTo(evt.offsetX * MINIMAP_SCALE - window.innerWidth/2, evt.offsetY * MINIMAP_SCALE - window.innerHeight/2);
+			// log(evt);
+			UpdateMinimap();
+		}
 	});
+
+	document.addEventListener("mousedown", evt => mouseDown = true);
+	document.addEventListener("mouseup", evt => mouseDown = false);
 
 	document.addEventListener("mousemove", evt => {
 		mouseX = evt.pageX;
 		mouseY = evt.pageY;
+
+		// if (mouseDown && evt.target == minimapElement) {
+		// 	window.scrollX = evt.offsetX * MINIMAP_SCALE;
+		// 	window.scrollY = evt.offsetY * MINIMAP_SCALE;
+		// 	log(evt);
+		// 	UpdateMinimap();
+		// }
 	})
 
 	document.addEventListener("keyup", evt => {
@@ -500,6 +543,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 			}
 		})
 	});
+
 
 	SetupGame();
 });

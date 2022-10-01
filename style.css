@@ -6,6 +6,8 @@ body {
 	font-family: sans-serif;
 	position: relative;
 	user-select: none;
+	width: 25600px;
+	height: 25600px;
 }
 
 x-unit {
@@ -27,13 +29,61 @@ x-unit[data-player="2"] {filter: hue-rotate(300deg) }
 	position: fixed;
 	top: 10px;
 	left: 10px;
-	font-size: 25px;
+	font-size: 18px;
+	font-family:  monospace;
 }
 
-#debugOutput {
+#minimap {
 	position: fixed;
-	bottom: 10px;
+	top: 48px;
+	left: 0;
+	width: 128px;
+	height: 128px;
+	overflow: hidden;
+	border: 1px solid #ccc;
+	background: #222;
+	z-index: 999999;
+}
+
+#minimap div {
+	position: absolute;
+	width: 4px;
+	height: 4px;
+	top: 0;
+	left: 0;
+	margin-left: -2px;
+	margin-top: -2px;
+	background: #11FC17;
+	z-index: 1000;
+	pointer-events: none;
+}
+
+#minimap div[data-player="0"] {
+	background-color: yellow;
+	z-index: 10;
+}
+#minimap div[data-player="0"] {background-color: #00DFFB; }
+#minimap div[data-player="2"] {background-color: #E70A0E; }
+#minimap div[data-player="1"].selected {
+	background-color: #fff;
+	z-index: 2000;
+}
+
+#minimap span {
+	position: absolute;
+	width: 100px;
+	height: 100px;
+	top: 0;
+	left: 0;
+	border: 1px solid #888;
+	pointer-events: none;
+}
+
+#unitInfo {
+	position: fixed;
+	width: 128px;
+	top: 196px;
 	left: 10px;
 	font-family:  monospace;
-	font-size: 17px;
+	font-size: 12px;
 }
