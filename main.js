@@ -11,12 +11,14 @@ const Order = {
 	Idle: "Idle",
 	MoveToPoint: "MoveToPoint",
 	MoveToFriendlyUnit: "MoveToFriendlyUnit",
-	MoveToAttackUnit: "MoveToAttackUnit",
-	AttackToPoint: "AttackToPoint",
 	MoveToHarvestResourceNode: "MoveToHarvestResourceNode",
 	HarvestResourceNode: "HarvestResourceNode",
 	MoveToResourceDepot: "MoveToResourceDepot",
 	ReturnResourcesInResourceDepot: "ReturnResourcesInResourceDepot",
+	Guard: "Guard",
+	MoveToAttackUnit: "MoveToAttackUnit",
+	AttackToPoint: "AttackToPoint",
+	PatrolArea: "PatrolArea",
 }
 
 
@@ -134,7 +136,7 @@ class UnitElement extends HTMLElement {
 
 	Setup(type, playerID) {
 		this.type = type;
-		if (this.type == Type.ResourceNode) playerID = PLAYER_NEUTRAL;
+		if (type == Type.ResourceNode) playerID = PLAYER_NEUTRAL;
 		this.playerID = playerID;
 		const data = GetUnitTypeData(this.type);
 		this.name = data.name;
@@ -160,12 +162,9 @@ class UnitElement extends HTMLElement {
 	}
 
 	Awake() {
-		if (this.type == Type.Harvester) this.harvestNearbyResources();
+		if (this.isHarvester) this.harvestNearbyResources();
 	}
 
-	get isActive() {
-		return this.parentNode != null;
-	}
 
 	get centerX() {
 		const r = this.getBoundingClientRect();
@@ -177,9 +176,13 @@ class UnitElement extends HTMLElement {
 		return r.y + r.width/2;
 	}
 
-	get isMobile() {
-		return this.moveSpeed > 0;
-	}
+	get isActive() {return this.parentNode != null; }
+	get isMobile() {return this.moveSpeed > 0; }
+	get isNeutral() {return this.playerID == PLAYER_NEUTRAL; }
+	get isHarvester() {return this.type == Type.Harvester; }
+	get isFighter() {return this.type == Type.Fighter; }
+	get isResourceNode() {return this.type == Type.ResourceNode; }
+	get isResoruceDepot() {return this.type == Type.ResourceDepot; }
 
 	distanceToPoint(x, y) { return Math.sqrt(Math.pow((this.centerX - x), 2) + Math.pow((this.centerY - y), 2)); }
 	distanceToUnit(unitElm) { return this.distanceToPoint(unitElm.centerX, unitElm.centerY); }
@@ -241,7 +244,7 @@ class UnitElement extends HTMLElement {
 	}
 
 	orderInteractWithUnit(targetUnit) {
-		if (this.type == Type.Harvester && targetUnit.type == Type.ResourceNode) {
+		if (this.isHarvester && targetUnit.isResourceNode) {
 			this.orderToHarvestResourceUnit(targetUnit);
 		} else if (targetUnit.playerID == this.playerID || targetUnit.playerID == PLAYER_NEUTRAL) {
 			this.orderMoveToFriendlyUnit(targetUnit);
@@ -296,7 +299,7 @@ class UnitElement extends HTMLElement {
 
 			if (this.resourceCarryAmount < RESOURCE_CARRY_AMOUNT_MAX) {
 				// Can carry more resources, continue harvesting
-				if (this.targetUnit && this.targetUnit.isActive && this.targetUnit.type == Type.ResourceNode && this.targetUnit.remainingResources > 0) {
+				if (this.targetUnit && this.targetUnit.isActive && this.targetUnit.isResourceNode && this.targetUnit.remainingResources > 0) {
 					this.resourceCarryAmount += 1;
 					this.targetUnit.remainingResources -= 1;
 				} else {
@@ -306,13 +309,13 @@ class UnitElement extends HTMLElement {
 				}
 			} else {
 				// Return home
-				const nearestDepot = FindNearestUnitOfType(this, Type.ResourceDepot, Infinity);
+				const nearestDepot = FindNearestUnitOfType(this, Type.ResourceDepot, Infinity, true);
 				if (nearestDepot) this.orderToReturnResourcesToDepotUnit(nearestDepot);
 				else this.resetToIdle();
 			}
 		}
 
-		if (this.type == Type.ResourceNode && this.remainingResources <= 0) {
+		if (this.isResourceNode && this.remainingResources <= 0) {
 			this.remove();
 		}
 
@@ -356,7 +359,7 @@ function DeselectAllUnits() {
 }
 
 function FindNearestUnitOfType(originUnitElm, type, searchRange, samePlayerRequirement = false) {
-	const nearestDepot = Array.from(GetAllUnits())
+	const nearestUnit = Array.from(GetAllUnits())
 	.filter((unitElm) => { return samePlayerRequirement ? (originUnitElm.playerID == unitElm.playerID) : true })
 	.filter((unitElm) => { return  unitElm.type == type })
 	.filter((unitElm) => { return unitElm.distanceToUnit(originUnitElm) < searchRange })
@@ -364,8 +367,20 @@ function FindNearestUnitOfType(originUnitElm, type, searchRange, samePlayerRequi
 		return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm);
 	})
 
-	if (nearestDepot.length == 0) return null;
-	else return nearestDepot[0];
+	if (nearestUnit.length == 0) return null;
+	else return nearestUnit[0];
+}
+
+function FindNearestEnemyUnit(originUnitElm, searchRange) {
+	const nearestUnit = Array.from(GetAllUnits())
+	.filter((unitElm) => { return !unitElm.isNeutral && unitElm.playerID != originUnitElm.playerID })
+	.sort((a, b) => {
+		return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm);
+	})
+	// TODO sort priority eg attackers first
+
+	if (nearestUnit.length == 0) return null;
+	else return nearestUnit[0];
 }
 
 function CreateUnit(type, playerID,x, y) {
@@ -384,8 +399,8 @@ function Tick(ms) {
 	const selectedUnits = GetSelectedUnits();
 	if (selectedUnits.length > 0) {
 		const unitElm = selectedUnits[0];
-		if (unitElm.type == Type.Harvester) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.previousResourceNode, unitElm.resourceCarryAmount);
-		else if (unitElm.type == Type.ResourceNode) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.remainingResources);
+		if (unitElm.isHarvester) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.previousResourceNode, unitElm.resourceCarryAmount);
+		else if (unitElm.isResourceNode) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.remainingResources);
 		else if (!unitElm.isMobile) Log(unitElm, unitElm.order);
 		else Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit);
 	}
