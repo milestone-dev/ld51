@@ -48,12 +48,17 @@ const Type = {
 	ResourceNode: "ResourceNode",
 }
 const UnitTypeData = {};
-function AddUnitTypeData(type, name, hotkey, icon, size, cost = 0, elevation = 0, buildTime = 0, hp = 1, priority = 0, moveSpeed = 0, attackRange = 0, attackDamage = 0, cooldownMax = 0) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, elevation, buildTime, hp, priority, moveSpeed, attackRange, attackDamage, cooldownMax}; }
+// function AddUnitTypeData(type, name, hotkey, icon, size, cost = 0, elevation = 0, buildTime = 0, hp = 1, priority = 0, powerRange = 0, moveSpeed = 0, attackRange = 0, attackDamage = 0, cooldownMax = 0) {UnitTypeData[type] = {type, name, hotkey, icon, size, cost, elevation, buildTime, hp, priority, powerRange, moveSpeed, attackRange, attackDamage, cooldownMax}; }
+//{type, name, hotkey, icon, size, cost, elevation, buildTime, hp, priority, powerRange, moveSpeed, attackRange, attackDamage, cooldownMax}
+function AddUnitTypeData(type, name, hotkey, icon, size, data = {}) {
+	UnitTypeData[type] = {type, name, hotkey, icon, size};
+	Object.keys(data).forEach(key => UnitTypeData[type][key] = data[key]);
+}
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
-AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, 50, 1000, 30, 100, 100, 200, MINING_RANGE, 0, 10);
-AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 1000, 30, 100, 50, 250, TILE * 6, 5, 10);
-AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 500, 60, 400, 700);
-AddUnitTypeData(Type.StaticDefense, "Tesla Coil", "t", "🗼", UNIT_SIZE_MEDIUM, 400, 500, 60, 200, 250, 0, TILE * 20, 30, 50);
+AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, moveSpeed:200, attackRange:MINING_RANGE, cooldownMax:10});
+AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, moveSpeed:200, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
+AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, {cost:400, elevation:500, buildTime:30, hp:1000, priority:300});
+AddUnitTypeData(Type.StaticDefense, "Tesla Coil", "t", "🗼", UNIT_SIZE_MEDIUM, {cost:400, elevation:500, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", UNIT_SIZE_LARGE);
 AddUnitTypeData(Type.Powerup, "Precursor Artefact", "a", "🗿", UNIT_SIZE_SMALL);
 
