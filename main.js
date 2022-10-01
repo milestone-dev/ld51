@@ -25,10 +25,10 @@ const PLAYER_NEUTRAL = 0;
 const PLAYER_HUMAN = 1;
 
 const UnitTypeData = [];
-function AddUnit(type, name, icon, size, hp, moveSpeed, elevation) {UnitTypeData[type] = {type, name, icon, size, hp, moveSpeed, elevation}; }
-AddUnit(Type.Harvester, "Harvester", "👾", UNIT_SIZE_MEDIUM, 100, 200,1000);
-AddUnit(Type.ResourceDepot, "Base", "🛰", UNIT_SIZE_XLARGE, 100, 0, 500);
-AddUnit(Type.ResourceNode, "Crystal", "🪨", UNIT_SIZE_LARGE, 100, 0, 0);
+function AddUnit(type, name, hotkey, icon, size, hp, moveSpeed, elevation) {UnitTypeData[type] = {type, name, hotkey, icon, size, hp, moveSpeed, elevation}; }
+AddUnit(Type.Harvester, "Harvester", "h", "👾", UNIT_SIZE_MEDIUM, 100, 200, 1000);
+AddUnit(Type.ResourceDepot, "Base", "b", "🛰", UNIT_SIZE_XLARGE, 100, 0, 500);
+AddUnit(Type.ResourceNode, "Resource", "r", "🪨", UNIT_SIZE_LARGE, 100, 0, 0);
 
 
 var mouseX, mouseY;
@@ -73,7 +73,7 @@ class UnitElement extends HTMLElement {
 		this.style.height = data.size;
 		this.style.lineHeight = px(data.size);
 		this.style.fontSize = px(data.size);
-		this.style.zIndex = px(data.elevation);
+		this.style.zIndex = data.elevation;
 		this.innerText = data.icon;
 		this.hp = data.hp;
 		this.moveSpeed = data.moveSpeed;
@@ -156,9 +156,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 	})
 
 	document.addEventListener("keyup", evt => {
-		if (evt.key == "u") CreateUnit(Type.Harvester, PLAYER_HUMAN, mouseX, mouseY);
-		else if (evt.key == "b") CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, mouseX, mouseY);
-		else if (evt.key == "r") CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, mouseX, mouseY);
+		UnitTypeData.forEach(data => { if (evt.key == data.hotkey) CreateUnit(data.type, PLAYER_HUMAN, mouseX, mouseY); });
 	});
 
 	document.addEventListener("contextmenu", evt => {
