@@ -18,6 +18,7 @@ const Order = {
 
 
 const UNIT_SELECTOR = "x-unit";
+const SPRITE_SELECTOR = "x-sprite";
 const TILE = 32;
 const UNIT_SIZE_SMALL = 24;
 const UNIT_SIZE_MEDIUM = 48;
@@ -33,6 +34,7 @@ const PLAYER_ENEMY = 2;
 const PATROL_RANGE = TILE;
 const MINIMAP_SCALE = 64;
 const WORLD_SIZE = 128;
+const EXPLOSION_SPRITE_TIMEOUT = 300;
 const GAME_EVENT_INTERVAL = 10000;
 
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
@@ -42,6 +44,7 @@ const Type = {
 	Harvester: "Harvester",
 	Fighter: "Fighter",
 	ResourceDepot: "ResourceDepot",
+	StaticDefense: "StaticDefense",
 	ResourceNode: "ResourceNode",
 }
 const UnitTypeData = {};
@@ -49,7 +52,8 @@ function AddUnitTypeData(type, name, hotkey, icon, size, cost = 0, elevation = 0
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
 AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", UNIT_SIZE_MEDIUM, 50, 1000, 30, 100, 100, 200, MINING_RANGE, 0, 10);
 AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", UNIT_SIZE_MEDIUM, 50, 1000, 30, 100, 50, 250, TILE * 6, 5, 10);
-AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 500, 60, 400, 700, 0, 0, 0, 0);
+AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", UNIT_SIZE_XLARGE, 400, 500, 60, 400, 700);
+AddUnitTypeData(Type.StaticDefense, "Tesla Coil", "t", "🗼", UNIT_SIZE_MEDIUM, 400, 500, 60, 200, 250, 0, TILE * 20, 30, 50);
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", UNIT_SIZE_LARGE);
 AddUnitTypeData(Type.Powerup, "Precursor Artefact", "a", "🗿", UNIT_SIZE_SMALL);
 
@@ -92,6 +96,8 @@ var eventInterval;
 const log = console.log;
 
 function px(i) {return i+"px"};
+
+class SpriteElement extends HTMLElement {}
 
 class UnitElement extends HTMLElement {
 
@@ -229,6 +235,7 @@ class UnitElement extends HTMLElement {
 	get isHarvester() {return this.type == Type.Harvester; }
 	get isPowerup() {return this.type == Type.Powerup; }
 	get isFighter() {return this.type == Type.Fighter; }
+	get isStaticDefense() {return this.type == Type.StaticDefense; }
 	get isResourceNode() {return this.type == Type.ResourceNode; }
 	get isResoruceDepot() {return this.type == Type.ResourceDepot; }
 
@@ -367,6 +374,14 @@ class UnitElement extends HTMLElement {
 		}
 	}
 
+	createSpriteEffect(emoji) {
+		const elm = document.createElement(SPRITE_SELECTOR);
+		elm.innerText = emoji;
+		elm.classList.add("explosion");
+		this.appendChild(elm);
+		window.setTimeout(e => elm.remove(), EXPLOSION_SPRITE_TIMEOUT);
+	}
+
 	pickupUnit(unitElm) {
 		if (!unitElm.isPowerup) return;
 		// TODO add bonus for retrieval
@@ -376,7 +391,7 @@ class UnitElement extends HTMLElement {
 	update() {
 		if (this.hp <= 0) this.destroy();
 
-		if (this.isFighter && this.order == Order.Idle) this.order = Order.Guard;
+		if ((this.isFighter || this.isStaticDefense) && this.order == Order.Idle) this.order = Order.Guard;
 		if (this.targetUnit && !this.targetUnit.isActive) this.targetUnit = null;
 		if (this.previousResourceNode && !this.previousResourceNode.isActive) this.previousResourceNode = null;
 
@@ -405,6 +420,7 @@ class UnitElement extends HTMLElement {
 		if (this.order == Order.AttackUnit) {
 			if (this.targetUnit && this.targetUnit.isActive) {
 				if (this.cooldown <= 0) {
+					this.targetUnit.createSpriteEffect("💥");
 					this.targetUnit.hp -= this.attackDamage;
 					this.cooldown = this.cooldownMax;
 				} else this.cooldown--;
@@ -415,9 +431,17 @@ class UnitElement extends HTMLElement {
 			if (!this.isMoving) this.orderToPatrolInArea(); 
 		}
 
-		if (this.order == Order.Guard || this.order == Order.AttackMoveToPoint || this.order == Order.PatrolArea) {
+		if (this.isFighter && (this.order == Order.Guard || this.order == Order.AttackMoveToPoint || this.order == Order.PatrolArea)) {
 			const nearestUnit = FindNearestEnemyUnit(this, FIGHER_SEARCH_RANGE);
 			if (nearestUnit) this.orderMoveToAttackUnit(nearestUnit);
+		}
+
+		if (this.isStaticDefense && this.order == Order.Guard) {
+			const nearestUnit = FindNearestEnemyUnit(this, this.attackRange);
+			if (nearestUnit) {
+				this.targetUnit = nearestUnit;
+				this.order = Order.AttackUnit;
+			}
 		}
 
 		if (this.isResourceNode && this.remainingResources <= 0) {
@@ -443,6 +467,7 @@ function SetupGame() {
 	uiElement = document.getElementById("ui");
 	eventInfoElement = document.getElementById("eventInfo");
 	customElements.define(UNIT_SELECTOR, UnitElement);
+	customElements.define(SPRITE_SELECTOR, SpriteElement);
 	worldElement.style.width = px(WORLD_SIZE * MINIMAP_SCALE);
 	worldElement.style.height = px(WORLD_SIZE * MINIMAP_SCALE);
 	PlayerResources[PLAYER_HUMAN] = 100;
@@ -460,6 +485,9 @@ function SetupGame() {
 	CreateUnit(Type.Harvester, PLAYER_HUMAN, 450, 250);
 	CreateUnit(Type.Harvester, PLAYER_HUMAN, 550, 250);
 	CreateUnit(Type.Harvester, PLAYER_HUMAN, 550, 350);
+
+	// CreateUnit(Type.StaticDefense, PLAYER_HUMAN, 550, 350);
+	// CreateUnit(Type.Harvester, PLAYER_ENEMY, 650, 450);
 }
 
 function Log(...args) {

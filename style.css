@@ -144,3 +144,23 @@ x-unit.selected[data-player="2"] {outline-color: red; }
 
 x-unit[data-player="2"] {filter: hue-rotate(300deg) }
 
+x-sprite {
+	position: absolute;
+	top: 0;	
+	left: 0;	
+}
+
+x-sprite.explosion {
+  animation-duration: 0.3s;
+  animation-name: explode;
+}
+
+@keyframes explode {
+  from {
+  	transform: scale(200%);
+  }
+
+  to {
+    transform: scale(10%);
+  }
+}
