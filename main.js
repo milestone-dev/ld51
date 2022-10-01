@@ -31,6 +31,7 @@ const MINING_RANGE = UNIT_SIZE_LARGE / 2;
 const MINING_SEARCH_RANGE = TILE * 24;
 const PLAYER_NEUTRAL = 0;
 const PLAYER_HUMAN = 1;
+const PLAYER_ENEMY = 2;
 
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
@@ -44,7 +45,7 @@ AddUnitTypeData(Type.ResourceNode, "Resource", "n", "🪨", UNIT_SIZE_LARGE, 0, 
 
 
 var mouseX, mouseY, debugOutputElement, statusBarElement;
-var PlayerResources = 100;
+var PlayerResources = [0, 0, 0, 0];
 
 function px(i) {return i+"px"};
 
@@ -74,7 +75,7 @@ class UnitElement extends HTMLElement {
 	}
 
 	toString() {
-		return `${this.name} (${this.type})`;
+		return `P${this.playerID} ${this.name} (${this.type})`;
 	}
 
 	onTransitionStart(evt) {
@@ -103,7 +104,7 @@ class UnitElement extends HTMLElement {
 		} else if (this.order == Order.MoveToResourceDepot && this.targetUnit) {
 			if (this.distanceToUnit(this.targetUnit) < MINING_RANGE) {
 				// console.log("Reached depot, depositing resources and finding another resoruce!");
-				PlayerResources += this.resourceCarryAmount;
+				PlayerResources[this.playerID] += this.resourceCarryAmount;
 				this.resourceCarryAmount = 0;
 				this.harvestNearbyResources();
 			}
@@ -133,6 +134,7 @@ class UnitElement extends HTMLElement {
 
 	Setup(type, playerID) {
 		this.type = type;
+		if (this.type == Type.ResourceNode) playerID = PLAYER_NEUTRAL;
 		this.playerID = playerID;
 		const data = GetUnitTypeData(this.type);
 		this.name = data.name;
@@ -147,6 +149,9 @@ class UnitElement extends HTMLElement {
 		// TODO add swich here to manage unit types
 		this.order = Order.Idle;
 		this.dataset.type = this.type;
+		this.dataset.player = this.playerID;
+
+
 	}
 
 	Move(x, y) {
@@ -170,6 +175,10 @@ class UnitElement extends HTMLElement {
 	get centerY() {
 		const r = this.getBoundingClientRect();
 		return r.y + r.width/2;
+	}
+
+	get isMobile() {
+		return this.moveSpeed > 0;
 	}
 
 	distanceToPoint(x, y) { return Math.sqrt(Math.pow((this.centerX - x), 2) + Math.pow((this.centerY - y), 2)); }
@@ -261,7 +270,7 @@ class UnitElement extends HTMLElement {
 	}
 
 	returnToNearbyDepot() {
-		const nearestDepot = FindNearestUnitOfType(this, Type.ResourceDepot, Infinity);
+		const nearestDepot = FindNearestUnitOfType(this, Type.ResourceDepot, Infinity, true);
 		if (nearestDepot) this.orderToReturnResourcesToDepotUnit(nearestDepot);
 		else this.resetToIdle();
 		return nearestDepot != null;
@@ -270,8 +279,8 @@ class UnitElement extends HTMLElement {
 	trainUnit(unitType) {
 		//For now all units can train all units
 		const data = GetUnitTypeData(unitType);
-		if (PlayerResources >= data.cost) {
-			PlayerResources -= data.cost
+		if (PlayerResources[this.playerID] >= data.cost) {
+			PlayerResources[this.playerID] -= data.cost
 			CreateUnit(unitType, this.playerID, this.centerX, this.centerY);
 		} else {
 			console.log("Not enough resources for", unitType);
@@ -307,10 +316,12 @@ class UnitElement extends HTMLElement {
 			this.remove();
 		}
 
-		var faceX = this.targetUnit ? this.targetUnit.centerX : this.targetX;
-		var faceY = this.targetUnit ? this.targetUnit.centerY : this.targetY;
-		if (faceX != Number.NaN && faceY != Number.NaN) {
-			this.facePoint(faceX, faceY);
+		if (this.isMobile) {
+			var faceX = this.targetUnit ? this.targetUnit.centerX : this.targetX;
+			var faceY = this.targetUnit ? this.targetUnit.centerY : this.targetY;
+			if (faceX != Number.NaN && faceY != Number.NaN) {
+				this.facePoint(faceX, faceY);
+			}
 		}
 
 	}
@@ -321,6 +332,7 @@ function SetupGame() {
 	statusBarElement = document.getElementById("statusBar");
 	customElements.define(UNIT_SELECTOR, UnitElement);
 	window.requestAnimationFrame(Tick);
+	PlayerResources[PLAYER_HUMAN] = 100;
 }
 
 function Log(...args) {
@@ -343,9 +355,10 @@ function DeselectAllUnits() {
 	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.classList.remove("selected"));
 }
 
-function FindNearestUnitOfType(originUnitElm, type, searchRange) {
+function FindNearestUnitOfType(originUnitElm, type, searchRange, samePlayerRequirement = false) {
 	const nearestDepot = Array.from(GetAllUnits())
-	.filter((unitElm) => { return unitElm.type == type })
+	.filter((unitElm) => { return samePlayerRequirement ? (originUnitElm.playerID == unitElm.playerID) : true })
+	.filter((unitElm) => { return  unitElm.type == type })
 	.filter((unitElm) => { return unitElm.distanceToUnit(originUnitElm) < searchRange })
 	.sort((a, b) => {
 		return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm);
@@ -366,13 +379,14 @@ function CreateUnit(type, playerID,x, y) {
 function Tick(ms) {
 	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.update());
 
-	statusBarElement.innerText = `Resources: ${PlayerResources}`;
+	statusBarElement.innerText = `Resources: ${PlayerResources[PLAYER_HUMAN]}`;
 
 	const selectedUnits = GetSelectedUnits();
 	if (selectedUnits.length > 0) {
 		const unitElm = selectedUnits[0];
 		if (unitElm.type == Type.Harvester) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.previousResourceNode, unitElm.resourceCarryAmount);
 		else if (unitElm.type == Type.ResourceNode) Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit, unitElm.remainingResources);
+		else if (!unitElm.isMobile) Log(unitElm, unitElm.order);
 		else Log(unitElm, unitElm.order, `${unitElm.targetX}, ${unitElm.targetY}`, unitElm.targetUnit);
 	}
 
@@ -394,14 +408,14 @@ document.addEventListener("DOMContentLoaded", evt => {
 
 	document.addEventListener("keyup", evt => {
 		Object.keys(UnitTypeData).forEach(key => {
-			if (evt.key == GetUnitTypeData(key).hotkey) {
+			if (evt.key.toLowerCase() == GetUnitTypeData(key).hotkey) {
 				// console.log(evt);
-				if (evt.ctrlKey) {
-					CreateUnit(UnitTypeData[key].type, PLAYER_HUMAN, mouseX, mouseY)
+				if (evt.shiftKey) {
+					CreateUnit(UnitTypeData[key].type, evt.ctrlKey ? PLAYER_ENEMY : PLAYER_HUMAN, mouseX, mouseY)
 				} else {
 					const selectedUnit = GetSelectedUnit();
 					if (selectedUnit) selectedUnit.trainUnit(UnitTypeData[key].type);
-					else console.log("No selected unit. Hold ctrl to spawn");
+					else console.log("No selected unit. Hold shift to spawn");
 				}
 			}
 		});
@@ -411,8 +425,10 @@ document.addEventListener("DOMContentLoaded", evt => {
 		evt.preventDefault();
 		const targetUnitElm = evt.target;
 		GetSelectedUnits().forEach(unitElm => {
-			if (!evt.target || !UnitElement.isElementUnit(evt.target)) unitElm.orderMoveToPoint(evt.pageX, evt.pageY);
-			else unitElm.orderInteractWithUnit(evt.target);
+			if (unitElm.isMobile) {
+				if (!evt.target || !UnitElement.isElementUnit(evt.target)) unitElm.orderMoveToPoint(evt.pageX, evt.pageY);
+				else unitElm.orderInteractWithUnit(evt.target);
+			}
 		})
 	});
 

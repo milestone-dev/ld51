@@ -18,6 +18,9 @@ x-unit.selected {
 	outline: green solid 5px;
 }
 
+x-unit.selected[data-player="0"] {outline-color: yellow; }
+x-unit.selected[data-player="2"] {outline-color: red; }
+
 #statusBar {
 	position: fixed;
 	top: 10px;
