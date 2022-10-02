@@ -16,7 +16,7 @@ const Order = {
 	PatrolArea: "PatrolArea",
 }
 
-
+const DEBUG_MODE = false;
 const UNIT_SELECTOR = "x-unit";
 const SPRITE_SELECTOR = "x-sprite";
 const OVERLAY_SELECTOR = "x-overlay";
@@ -1197,7 +1197,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 				if (data.isBuilding) {
 					CurrentBuildingPlaceType = type;
 				} else {
-					if (evt.shiftKey) {
+					if (DEBUG_MODE && evt.shiftKey) {
 						CreateUnit(type, evt.ctrlKey ? PLAYER_ENEMY : PLAYER_HUMAN, mouseX, mouseY)
 					} else {
 						const selectedUnit = GetSelectedUnit();
