@@ -53,6 +53,8 @@ const Type = {
 	Harvester: "Harvester",
 	Fighter: "Fighter",
 }
+
+var EnemyPlayers = 0;
 const UnitTypeData = {};
 //{type, name, hotkey, icon, size, cost, elevation, buildTime, hp, priority, powerRange, moveSpeed, attackRange, attackDamage, visionRange, cooldownMax, unitsTrained = []}
 function AddUnitTypeData(type, name, hotkey, icon, tooltip, size, data = {}) {
@@ -75,6 +77,7 @@ const GameEvent = {
 	MapScan: "MapScan",
 	PirateInvasion: "PirateInvasion",
 	AlienInvasion: "AlienInvasion",
+	RivalMiners: "RivalMiners",
 	WarpRift: "WarpRift",
 	IonStorm: "IonStorm",
 	Artefact: "Artefact",
@@ -99,6 +102,7 @@ AddGameEventData(GameEvent.Reinforcements, "Reinforcements have arrived", 10);
 AddGameEventData(GameEvent.MoraleBoost, "Morale is surging. Worker speed increased by 10%.", 10);
 AddGameEventData(GameEvent.MoraleLoss, "Worker morale has taken a hit. Worker speed decreased by 20%", 10);
 AddGameEventData(GameEvent.NetworkError, "A long range frequency network outage has been discovered.", 10);
+AddGameEventData(GameEvent.RivalMiners, "A rival mining team has entered the sector in search of riches", 10);
 
 var UNIT_ID = 0;
 var mouseX, mouseY, mouseDown, mousePlaceX, mousePlaceY, mouseClientX, mouseClientY;
@@ -629,7 +633,7 @@ function SetupGame() {
 	window.setInterval(UpdateMinimap, 100);
 	UpdateMinimap();
 	UpdateUI();
-	eventInterval = window.setInterval(CreateNewGameEvent, GAME_EVENT_INTERVAL);
+	eventInterval = window.setInterval(HandleNewGameEvent, GAME_EVENT_INTERVAL);
 	window.setInterval(UpdateUI, GAME_UI_REFRESH_INTERVAL);
 	window.setInterval(e => UpdateUnitInfo(true), GAME_UI_REFRESH_INTERVAL);
 
@@ -648,11 +652,11 @@ function SetupGame() {
 		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 - 100, WORLD_SIZE/2 + 100);
 
 		for (var i = 0; i < 100; i++) {
-			CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
+			CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, GetRandomWorldPoint(), GetRandomWorldPoint());
 		}
 
-		for (var i = 0; i < 10; i++) {
-			const unit = CreateUnit(Type.Fighter, PLAYER_ENEMY, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
+		for (var i = 0; i < 3; i++) {
+			const unit = CreateUnit(Type.Fighter, PLAYER_ENEMY, GetRandomWorldPoint(), GetRandomWorldPoint());
 			unit.orderToPatrolInArea();
 		}
 	} else {
@@ -670,6 +674,23 @@ function Log(...args) {
 	unitInfoElement.innerHTML = args.join("<br>");
 }
 
+function GetRandomWorldPoint() {
+	var point = Math.random() * WORLD_SIZE;
+	return point;
+}
+
+function GetRandomWorldPointAtEdge() {
+	var point = Number.NaN;
+	while (Number.isNaN(point) || (point > WORLD_SIZE / 10 && point < WORLD_SIZE - WORLD_SIZE / 10)) point = Math.random() * WORLD_SIZE;
+	return point;
+}
+
+function GetRandomWorldPointNearEdge() {
+	var point = Number.NaN;
+	while (Number.isNaN(point) || (point > WORLD_SIZE / 5 && point < WORLD_SIZE - WORLD_SIZE / 5)) point = Math.random() * WORLD_SIZE;
+	return point;
+}
+
 function GetAllUnits() {
 	return worldElement.querySelectorAll(UNIT_SELECTOR);
 }
@@ -684,6 +705,10 @@ function GetSelectedUnit() {
 
 function DeselectAllUnits() {
 	return worldElement.querySelectorAll(".selected").forEach(unitElm => unitElm.classList.remove("selected"));
+}
+
+function GetAllPlayerUnits(playerID) {
+	return Array.from(GetAllUnits()).filter(unitElm => unitElm.playerID == playerID);
 }
 
 function GetAllPowerGenerators(playerID) {
@@ -822,7 +847,7 @@ function UpdateUnitInfo(force=false) {
 	}
 }
 
-function CreateNewGameEvent(id = null) {
+function HandleNewGameEvent(id = null) {
 
 	const eventKeys = Object.keys(GameEvent);
 	// TODO randomize with weights
@@ -833,16 +858,41 @@ function CreateNewGameEvent(id = null) {
 
 	const eventElement = document.createElement("span");
 	eventElement.innerText = newEvent.message;
-
-	if (newEvent.id == GameEvent.PirateInvasion && HumanPlayerTownHall) {
-		const units = CreateUnitsInArea(2, Type.Fighter, PLAYER_ENEMY, WORLD_SIZE*0.9, WORLD_SIZE*0.9);
-		units.forEach(unitElm => unitElm.orderAttackMoveToPoint(HumanPlayerTownHall.centerX, HumanPlayerTownHall.centerY))
+	var eventX = Number.NaN;
+	var eventY = Number.NaN;
+	var units;
+	switch (newEvent.id) {
+		case GameEvent.PirateInvasion:
+			eventX = GetRandomWorldPointAtEdge();
+			eventY = GetRandomWorldPointAtEdge();
+			units = CreateUnitsInArea(2, Type.Fighter, PLAYER_ENEMY, eventX, eventY);
+			units.forEach(unitElm => unitElm.orderAttackMoveToPoint(HumanPlayerTownHall.centerX, HumanPlayerTownHall.centerY))
+		break;
+		case GameEvent.AlienInvasion:
+			eventX = GetRandomWorldPoint();
+			eventY = GetRandomWorldPoint();
+			units = CreateUnitsInArea(3, Type.Fighter, PLAYER_ENEMY, eventX, eventY);
+			units.forEach(unitElm => unitElm.orderToPatrolInArea())
+		break;
+		case GameEvent.RivalMiners:
+			eventX = GetRandomWorldPointNearEdge();
+			eventY = GetRandomWorldPointNearEdge();
+			CreateUnit(Type.ResourceDepot, PLAYER_ENEMY, eventX, eventY);
+			units = CreateUnitsInArea(3, Type.Harvester, PLAYER_ENEMY, eventX, eventY);
+			units.forEach(unitElm => unitElm.harvestNearbyResources())
+		break;
+		case GameEvent.Reinforcements:
+			eventX = HumanPlayerTownHall.centerX;
+			eventY = HumanPlayerTownHall.centerX;
+			CreateUnitsInArea(1, Type.Fighter, PLAYER_HUMAN, eventX, eventY);
+		break;
 	}
 
-	if (newEvent.id == GameEvent.AlienInvasion) {
-		const units = CreateUnitsInArea(3, Type.Fighter, PLAYER_ENEMY, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
-		units.forEach(unitElm => unitElm.orderToPatrolInArea())
+	if (!Number.isNaN(eventX) && !Number.isNaN(eventY)) {
+		log("ping at", eventX, eventY);
 	}
+
+
 
 	eventInfoElement.appendChild(eventElement);
 }
