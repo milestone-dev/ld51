@@ -1034,6 +1034,11 @@ document.addEventListener("DOMContentLoaded", evt => {
 		})
 	});
 
+	window.addEventListener("beforeunload", evt => {
+		evt.preventDefault();
+		return event.returnValue = "Are you sure you want to exit the current game?";
+	});
+
 
 	SetupGame();
 });
