@@ -52,7 +52,8 @@ const Type = {
 	StaticDefense: "StaticDefense",
 	PowerExtender: "PowerExtender",
 	Harvester: "Harvester",
-	Fighter: "Fighter",
+	Interceptor: "Interceptor",
+	Destroyer: "Destroyer",
 	Artefact: "Artefact",
 	DerelictShip: "DerelictShip",
 	AlienAffliction: "AlienAffliction",
@@ -73,18 +74,19 @@ function AddUnitTypeData(type, name, hotkey, icon, tooltip, size, data = {}) {
 }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
 AddUnitTypeData(Type.Harvester, "Miner pod", "h", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, visionRange:TILE*8, moveSpeed:2, attackRange:MINING_RANGE, cooldownMax:10});
-AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", "Cost: 50. Primary fighter unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
-AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", "Cost: 400. Primary resource depot and harvester training facility.", UNIT_SIZE_XLARGE, {isBuilding:true, cost:400, visionRange:TILE*12, elevation:500, buildTime:30, hp:1000, priority:300, powerRange:TILE*10, unitsTrained:[Type.Harvester, Type.Fighter]});
+AddUnitTypeData(Type.Interceptor, "Interceptor", "f", "🚀", "Cost: 50. Primary fighter unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:40, attackRange:TILE*10, cooldownMax:15});
+AddUnitTypeData(Type.Destroyer, "Destroyer", "d", "🚝", "Cost: 300. Heavy fighter unit.", UNIT_SIZE_LARGE, {cost:50, elevation:1000, buildTime:30, hp:400, priority:25, visionRange:TILE*12, moveSpeed:1, attackDamage:50, attackRange:TILE*6, cooldownMax:15});
+AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", "Cost: 400. Primary resource depot and harvester training facility.", UNIT_SIZE_XLARGE, {isBuilding:true, cost:400, visionRange:TILE*12, elevation:500, buildTime:30, hp:1000, priority:300, powerRange:TILE*10, unitsTrained:[Type.Harvester, Type.Interceptor, Type.Destroyer]});
 AddUnitTypeData(Type.PowerExtender, "Power Extender", "p", "📍", "Cost: 100. Extends power range to allow base expansion.", UNIT_SIZE_MEDIUM, {isBuilding: true, cost:100, elevation:500, visionRange:TILE*8, buildTime:30, hp:200, priority:100, powerRange:TILE*8});
 AddUnitTypeData(Type.StaticDefense, "Tesla Coil Defense", "d", "🗼", "Cost: 200. Primary static defense structure.", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:200, elevation:500, visionRange:TILE*15, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", "", UNIT_SIZE_LARGE);
 AddUnitTypeData(Type.Artefact, "Precursor Artefact", "a", "🗿", "", UNIT_SIZE_SMALL);
 AddUnitTypeData(Type.DerelictShip, "Derelict Ship", "", "✈️", "", UNIT_SIZE_LARGE);
 
-AddUnitTypeData(Type.AlienAffliction, "Affliction", null, "🦇", "", UNIT_SIZE_SMALL, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
-AddUnitTypeData(Type.AlienGorger, "Gorger", null, "🐉", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
-AddUnitTypeData(Type.PirateRaider, "Raider", null, "🛸", "", UNIT_SIZE_MEDIUM, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
-AddUnitTypeData(Type.PirateMarauder, "Marauder", null, "🛩", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
+AddUnitTypeData(Type.AlienAffliction, "Affliction", null, "🦇", "", UNIT_SIZE_SMALL, {elevation:1000, hp:25, priority:25, visionRange:TILE*12, moveSpeed:3, attackDamage:2, attackRange:TILE*6, cooldownMax:7});
+AddUnitTypeData(Type.AlienGorger, "Gorger", null, "🐉", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:1, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
+AddUnitTypeData(Type.PirateRaider, "Raider", null, "🛸", "", UNIT_SIZE_MEDIUM, {elevation:1000, hp:100, priority:25, visionRange:TILE*12, moveSpeed:2.5, attackDamage:8, attackRange:TILE*4, cooldownMax:10});
+AddUnitTypeData(Type.PirateMarauder, "Marauder", null, "🛩", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:1, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
 
 
 
@@ -726,7 +728,7 @@ function StartNewGame() {
 		}
 
 		for (var i = 0; i < 3; i++) {
-			const unit = CreateUnit(Type.Fighter, PLAYER_ENEMY, GetRandomWorldPoint(), GetRandomWorldPoint());
+			const unit = CreateUnit(Type.Interceptor, PLAYER_ENEMY, GetRandomWorldPoint(), GetRandomWorldPoint());
 			unit.orderToPatrolInArea();
 		}
 	} else {
@@ -985,7 +987,7 @@ function HandleNewGameEvent(id = null) {
 		case GameEvent.Reinforcements:
 			eventX = HumanPlayerTownHall.centerX;
 			eventY = HumanPlayerTownHall.centerX;
-			CreateUnit(Type.Fighter, PLAYER_HUMAN, eventX, eventY);
+			CreateUnit(Type.Interceptor, PLAYER_HUMAN, eventX, eventY);
 		break;
 		case GameEvent.ArtefactDiscovery:
 			eventX = GetRandomWorldPoint();
@@ -1169,7 +1171,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 				if (data.isBuilding) {
 					CurrentBuildingPlaceType = type;
 				} else {
-					if (evt.shiftKey) {
+					if (false && evt.shiftKey) {
 						CreateUnit(type, evt.ctrlKey ? PLAYER_ENEMY : PLAYER_HUMAN, mouseX, mouseY)
 					} else {
 						const selectedUnit = GetSelectedUnit();
