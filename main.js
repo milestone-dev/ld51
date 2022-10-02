@@ -25,11 +25,11 @@ const UNIT_SIZE_SMALL = 24;
 const UNIT_SIZE_MEDIUM = 48;
 const UNIT_SIZE_LARGE = 64;
 const UNIT_SIZE_XLARGE = 128;
-const STOPPING_RANGE = 24;
+const STOPPING_RANGE = TILE/2;
 const MINING_RANGE = UNIT_SIZE_LARGE / 2;
-const MINING_SEARCH_RANGE = TILE * 24;
-const FIGHER_SEARCH_RANGE = TILE * 10;
 const PLAYER_NEUTRAL = 0;
+const MINING_SEARCH_RANGE = TILE * 24;
+const FIGHER_SEARCH_RANGE = TILE * 15;
 const PLAYER_HUMAN = 1;
 const PLAYER_ENEMY = 2;
 const PATROL_RANGE = TILE*8;
@@ -37,6 +37,7 @@ const MINIMAP_SCALE = 64;
 const WORLD_SIZE = 128*64;
 const EXPLOSION_SPRITE_TIMEOUT = 300;
 const GAME_EVENT_INTERVAL = 10000;
+const GAME_UI_REFRESH_INTERVAL = 500;
 
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
@@ -56,8 +57,8 @@ function AddUnitTypeData(type, name, hotkey, icon, tooltip, size, data = {}) {
 	Object.keys(data).forEach(key => UnitTypeData[type][key] = data[key]);
 }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
-AddUnitTypeData(Type.Harvester, "Miner pod", "h", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, moveSpeed:200, attackRange:MINING_RANGE, cooldownMax:10});
-AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", "Cost: 50. Primary fighter unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, moveSpeed:200, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
+AddUnitTypeData(Type.Harvester, "Miner pod", "h", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, moveSpeed:2, attackRange:MINING_RANGE, cooldownMax:10});
+AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", "Cost: 50. Primary fighter unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
 AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", "Cost: 400. Primary resource depot and harvester training facility.", UNIT_SIZE_XLARGE, {isBuilding:true, cost:400, elevation:500, buildTime:30, hp:1000, priority:300, powerRange:TILE*10, unitsTrained:[Type.Harvester, Type.Fighter]});
 AddUnitTypeData(Type.PowerExtender, "Power Extender", "p", "📍", "Cost: 100. Extends power range to allow base expansion.", UNIT_SIZE_MEDIUM, {isBuilding: true, cost:100, elevation:500, buildTime:30, hp:200, priority:100, powerRange:TILE*8});
 AddUnitTypeData(Type.StaticDefense, "Tesla Coil Defense", "d", "🗼", "Cost: 200. Primary static defense structure.", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:200, elevation:500, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
@@ -109,6 +110,7 @@ var TooltipDisplaying = false;
 const log = console.log;
 
 function px(i) {return i+"px"};
+function lerp(start, end, amt){ return (1-amt)*start+amt*end; }
 
 class SpriteElement extends HTMLElement {}
 class OverlayElement extends HTMLElement {}
@@ -133,6 +135,11 @@ class UnitElement extends HTMLElement {
 		this.targetY = Number.NaN;
 		this.patrolOriginX = Number.NaN;
 		this.patrolOriginY = Number.NaN;
+		this.centerX = 0;
+		this.centerY = 0;
+		this.destinationX = Number.NaN;
+		this.destinationY = Number.NaN;
+		this.radians = 0;
 
 		// Harvester specific
 		this.resourceCarryAmount = 0;
@@ -170,88 +177,19 @@ class UnitElement extends HTMLElement {
 	}
 
 	toString() {
-		return `P${this.playerID} ${this.name} (${this.type})`;
-	}
-
-	onTransitionStart(evt) {
-		this.isMoving = true;
-	}
-
-	onTransitionEnd(evt) {
-		// console.log("onTransitionEnd", this.order);
-		this.isMoving = false;
-
-		if (this.order == Order.MoveToPoint) {
-			if (this.distanceToPoint(this.targetX, this.targetY) < STOPPING_RANGE) {
-				// log("Reached point, idling!");
-				this.resetToIdle();
-			}
-		} else if (this.order == Order.MoveToHarvestResourceNode) {
-			if (!this.targetUnit || !this.targetUnit.isActive) {
-				// log("Trying to move to a resource node that is gone. Looking for options...");
-				this.harvestNearbyResources();
-			} else if (this.distanceToUnit(this.targetUnit) < MINING_RANGE) {
-				// log("Reached node, start harvesting!");
-				this.order = Order.HarvestResourceNode;
-				this.previousResourceNode = this.targetUnit;
-			}
-		} else if (this.order == Order.HarvestResourceNode && this.targetUnit) {
-			// Pass
-		} else if (this.order == Order.MoveToResourceDepot && this.targetUnit) {
-			if (this.distanceToUnit(this.targetUnit) < MINING_RANGE) {
-				// log("Reached depot, depositing resources and finding another resoruce!");
-				PlayerResources[this.playerID] += this.resourceCarryAmount;
-				this.resourceCarryAmount = 0;
-				this.harvestNearbyResources();
-			}
-		} else if (this.order == Order.MoveToFriendlyUnit && this.targetUnit) {
-			if (this.distanceToUnit(this.targetUnit) < STOPPING_RANGE) {
-				if (this.isHarvester && this.targetUnit.isPowerup) {
-					this.pickupUnit(this.targetUnit);
-				}
-				this.resetToIdle();
-			}
-		} else if (this.order == Order.MoveToAttackUnit && this.targetUnit) {
-			if (this.distanceToUnit(this.targetUnit) < this.attackRange) {
-				// this.stop();
-				this.order = Order.AttackUnit;
-			}
-		} else if (this.order == Order.HarvestResourceNode || this.order == Order.AttackUnit || this.order == Order.Idle || this.order == Order.PatrolArea) {
-			// Pass
-		} else {
-			log("Did not manage order", this.order);
-			this.resetToIdle();
-		}
-
+		return `P${this.playerID} ${this.name} (${this.type}) ${this.centerX},${this.centerY}`;
 	}
 
 	connectedCallback() {
-		this.style.left = 0;
-		this.style.top = 0;
-		
-
-		this.addEventListener("transitionstart", this.onTransitionStart);
-		this.addEventListener("transitionend", this.onTransitionEnd);
 	}
 
 	Move(x, y) {
-		this.style.left = px(x);
-		this.style.top = px(y);
+		this.centerX = x;
+		this.centerY = y;
 	}
 
 	Awake() {
 		if (this.isHarvester) this.harvestNearbyResources();
-	}
-
-
-	get centerX() {
-		const r = this.getBoundingClientRect();
-		return r.x + window.scrollX + r.width/2;
-	}
-
-	get centerY() {
-		const r = this.getBoundingClientRect();
-		return r.y + window.scrollY + r.width/2;
 	}
 
 	get isActive() {return this.parentNode != null; }
@@ -259,7 +197,7 @@ class UnitElement extends HTMLElement {
 	get isNeutral() {return this.playerID == PLAYER_NEUTRAL; }
 	get isHarvester() {return this.type == Type.Harvester; }
 	get isPowerup() {return this.type == Type.Powerup; }
-	get isFighter() {return this.type == Type.Fighter; }
+	get isAttackingUnit() {return this.attackDamage > 0; }
 	get isStaticDefense() {return this.type == Type.StaticDefense; }
 	get isResourceNode() {return this.type == Type.ResourceNode; }
 	get isResoruceDepot() {return this.type == Type.ResourceDepot; }
@@ -285,13 +223,17 @@ class UnitElement extends HTMLElement {
 	travelToPoint(orderX, orderY) {
 		// console.log(orderX, orderY);
 		if (this.moveSpeed == 0) return;
-		const r = this.getBoundingClientRect();
-		const distance = this.distanceToPoint(orderX,orderY);
-		const moveDuration = distance / this.moveSpeed;
-		this.style.transitionDuration = moveDuration + "s";
-		this.style.left = px(orderX - r.width/2);
-		this.style.top = px(orderY - r.height/2);
-		// this.offsetHeight;
+
+		this.destinationX = orderX;
+		this.destinationY = orderY;
+
+		//OLD
+		// const r = this.getBoundingClientRect();
+		// const distance = this.distanceToPoint(orderX,orderY);
+		// const moveDuration = distance / this.moveSpeed;
+		// this.style.transitionDuration = moveDuration + "s";
+		// this.style.left = px(orderX - r.width/2);
+		// this.style.top = px(orderY - r.height/2);
 	}
 
 	resetToIdle() {
@@ -369,14 +311,24 @@ class UnitElement extends HTMLElement {
 		}
 	}
 
-	stop() {
-		const r = this.getBoundingClientRect();
-		const distance = 0;
-		const moveDuration = distance / this.moveSpeed;
-		this.style.transitionDuration = moveDuration + "s";
-		this.style.left = px(r.x - r.width/2); // window.scrollX
-		this.style.top = px(r.y - r.height/2); // window.scrollY
+	stopTravelling() {
+		this.destinationX = Number.NaN;
+		this.destinationY = Number.NaN;
 	}
+
+	stop() {
+		console.log("stopping unit");
+		this.stopTravelling();
+		this.order = Order.Idle;
+		// const r = this.getBoundingClientRect();
+		// const distance = 0;
+		// const moveDuration = distance / this.moveSpeed;
+		// this.style.transitionDuration = moveDuration + "s";
+		// this.style.left = px(r.x - r.width/2); // window.scrollX
+		// this.style.top = px(r.y - r.height/2); // window.scrollY
+	}
+
+
 
 	destroy() {
 		this.hp = 0;
@@ -385,7 +337,7 @@ class UnitElement extends HTMLElement {
 
 	facePoint(x,y) {
 		const atan = Math.atan2(y - this.centerY, x - this.centerX) + Math.PI/2
-		this.style.transform = `rotate(${atan}rad)`;
+		this.radians = atan;
 	}
 
 	harvestNearbyResources() {
@@ -431,12 +383,96 @@ class UnitElement extends HTMLElement {
 		unitElm.remove();
 	}
 
-	update() {
+	get transform() {
+		return `translate3d(${px(this.centerX-this.size/2)}, ${px(this.centerY-this.size/2)}, 0) rotate(${this.radians}rad)`;
+	}
+
+	Update() {
 		if (this.hp <= 0) this.destroy();
 
-		if ((this.isFighter || this.isStaticDefense) && this.order == Order.Idle) this.order = Order.Guard;
+		if ((this.isAttackingUnit || this.isStaticDefense) && this.order == Order.Idle) this.order = Order.Guard;
 		if (this.targetUnit && !this.targetUnit.isActive) this.targetUnit = null;
 		if (this.previousResourceNode && !this.previousResourceNode.isActive) this.previousResourceNode = null;
+
+
+		if (!Number.isNaN(this.destinationX)) {
+			this.isMoving = true;
+		    var deltaX = this.destinationX - this.centerX;
+		    if (Math.abs(deltaX) > TILE/10) {
+			    deltaX = deltaX / Math.sqrt(deltaX * deltaX);
+			    this.centerX += deltaX * this.moveSpeed;
+		    } else {
+		    	this.destinationX = Number.NaN;
+		    }
+		}
+
+		if (!Number.isNaN(this.destinationY)) {
+			this.isMoving = true;
+		    var deltaY = this.destinationY - this.centerY;
+		    if (Math.abs(deltaY) > TILE/10) {
+			    deltaY = deltaY / Math.sqrt(deltaY * deltaY);
+			    this.centerY += deltaY * this.moveSpeed;
+		    } else {
+		    	this.destinationY = Number.NaN;
+		    }
+		}
+
+		this.isMoving = (!Number.isNaN(this.destinationX) || !Number.isNaN(this.destinationY));
+
+
+		if (this.order == Order.MoveToPoint) {
+			if (this.distanceToPoint(this.targetX, this.targetY) < STOPPING_RANGE) {
+				// log("Reached point, idling!");
+				this.resetToIdle();
+			}
+		} else if (this.order == Order.MoveToHarvestResourceNode) {
+			if (!this.targetUnit || !this.targetUnit.isActive) {
+				// log("Trying to move to a resource node that is gone. Looking for options...");
+				this.harvestNearbyResources();
+			} else if (this.distanceToUnit(this.targetUnit) < MINING_RANGE) {
+				// log("Reached node, start harvesting!");
+				this.order = Order.HarvestResourceNode;
+				this.previousResourceNode = this.targetUnit;
+			}
+		} else if (this.order == Order.HarvestResourceNode && this.targetUnit) {
+			// Pass
+		} else if (this.order == Order.MoveToResourceDepot && this.targetUnit) {
+			if (this.distanceToUnit(this.targetUnit) < MINING_RANGE) {
+				// log("Reached depot, depositing resources and finding another resoruce!");
+				PlayerResources[this.playerID] += this.resourceCarryAmount;
+				this.resourceCarryAmount = 0;
+				this.harvestNearbyResources();
+			}
+		} else if (this.order == Order.MoveToFriendlyUnit && this.targetUnit) {
+			if (this.distanceToUnit(this.targetUnit) < STOPPING_RANGE) {
+				if (this.isHarvester && this.targetUnit.isPowerup) {
+					this.pickupUnit(this.targetUnit);
+				}
+				this.resetToIdle();
+			}
+		} else if (this.order == Order.AttackMoveToPoint) {
+			//
+		} else if (this.order == Order.MoveToAttackUnit) {
+			if (this.targetUnit) {
+				if (this.distanceToUnit(this.targetUnit) < this.attackRange) {
+					// this.stop();
+					this.stopTravelling();
+					this.order = Order.AttackUnit;
+				} else {
+					this.travelToPoint(this.targetUnit.centerX, this.targetUnit.centerY);
+				}
+			}
+			else this.resetToIdle();
+		} else if (this.order == Order.HarvestResourceNode || this.order == Order.AttackUnit || this.order == Order.Idle || this.order == Order.Guard || this.order == Order.PatrolArea) {
+			// Pass
+		} else {
+			log("Did not manage order", this.order);
+			debugger;
+			this.resetToIdle();
+		}
+
+
+		this.style.transform = this.transform;
 
 		if (this.order == Order.HarvestResourceNode) {
 			if (this.resourceCarryAmount < RESOURCE_CARRY_AMOUNT_MAX) {
@@ -475,16 +511,18 @@ class UnitElement extends HTMLElement {
 			if (!this.isMoving) this.orderToPatrolInArea(); 
 		}
 
-		if (this.isFighter && (this.order == Order.Guard || this.order == Order.AttackMoveToPoint || this.order == Order.PatrolArea)) {
-			const nearestUnit = FindNearestEnemyUnit(this, FIGHER_SEARCH_RANGE);
-			if (nearestUnit) this.orderMoveToAttackUnit(nearestUnit);
-		}
+		// Acquire a new target
+		if (this.isAttackingUnit && (this.order == Order.Guard || this.order == Order.AttackMoveToPoint || this.order == Order.PatrolArea)) {
 
-		if (this.isStaticDefense && this.order == Order.Guard) {
-			const nearestUnit = FindNearestEnemyUnit(this, this.attackRange);
-			if (nearestUnit) {
-				this.targetUnit = nearestUnit;
-				this.order = Order.AttackUnit;
+			if (this.isStaticDefense) {
+				const nearestUnit = FindNearestEnemyUnit(this, this.attackRange);
+				if (nearestUnit) {
+					this.targetUnit = nearestUnit;
+					this.order = Order.AttackUnit;
+				}
+			} else {
+				const nearestUnit = FindNearestEnemyUnit(this, FIGHER_SEARCH_RANGE);
+				if (nearestUnit) this.orderMoveToAttackUnit(nearestUnit);
 			}
 		}
 
@@ -532,25 +570,34 @@ function SetupGame() {
 	window.setInterval(UpdateMinimap, 100);
 	UpdateMinimap();
 	eventInterval = window.setInterval(CreateNewGameEvent, GAME_EVENT_INTERVAL);
+	window.setInterval(e => UpdateUnitInfo(true), GAME_UI_REFRESH_INTERVAL);
 
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 250, WORLD_SIZE/2 + 200);
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 200, WORLD_SIZE/2 - 250);
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 250, WORLD_SIZE/2 - 150);
-	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 150, WORLD_SIZE/2 + 250);
-	HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
-	CreateUnit(Type.StaticDefense, PLAYER_HUMAN, WORLD_SIZE/2 + TILE*4, WORLD_SIZE/2 + TILE*4);
-	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 + 100);
-	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 - 100);
-	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 - 100, WORLD_SIZE/2 + 100);
 
-	for (var i = 0; i < 100; i++) {
-		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
-	}
 
-	for (var i = 0; i < 10; i++) {
-		const unit = CreateUnit(Type.Fighter, PLAYER_ENEMY, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
-		unit.orderToPatrolInArea();
+	if (true) {
+		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 250, WORLD_SIZE/2 + 200);
+		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 200, WORLD_SIZE/2 - 250);
+		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
+		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 250, WORLD_SIZE/2 - 150);
+		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 150, WORLD_SIZE/2 + 250);
+		HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
+		CreateUnit(Type.StaticDefense, PLAYER_HUMAN, WORLD_SIZE/2 + TILE*4, WORLD_SIZE/2 + TILE*4);
+		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 + 100);
+		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 - 100);
+		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 - 100, WORLD_SIZE/2 + 100);
+
+		for (var i = 0; i < 100; i++) {
+			CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
+		}
+
+		for (var i = 0; i < 10; i++) {
+			const unit = CreateUnit(Type.Fighter, PLAYER_ENEMY, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
+			unit.orderToPatrolInArea();
+		}
+	} else {
+		HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
+		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
+		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
 	}
 
 	window.requestAnimationFrame(Tick);
@@ -611,6 +658,7 @@ function CreateUnit(type, playerID, x, y) {
 	worldElement.appendChild(unitElm);
 	unitElm.Move(x,y);
 	unitElm.Awake();
+	unitElm.Update();
 	return unitElm;
 }
 
@@ -678,17 +726,31 @@ function UpdateUnitInfo(force=false) {
 		return;
 	}
 
-	if (selectedUnit && (force || CurrentDisplayUnit != selectedUnit)) {
-		CurrentDisplayUnit = selectedUnit;
+	var refreshInfo = (force || CurrentDisplayUnit != selectedUnit);
+	var refreshButtons = (CurrentDisplayUnit != selectedUnit);
+
+	if (!selectedUnit) {
+		CurrentDisplayUnit = null;
 		unitInfoElement.innerHTML = "";
 		trainButtonsElement.innerHTML = "";
+		return;
+	}
+	
+	if (CurrentDisplayUnit != selectedUnit) {
+		CurrentDisplayUnit = selectedUnit;
+	}
 
+	if (refreshInfo) {
+		unitInfoElement.innerHTML = "";
 		if (CurrentDisplayUnit.isHarvester) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, CurrentDisplayUnit.order, `${CurrentDisplayUnit.targetX}, ${CurrentDisplayUnit.targetY}`, CurrentDisplayUnit.targetUnit, CurrentDisplayUnit.previousResourceNode, CurrentDisplayUnit.resourceCarryAmount, `${CurrentDisplayUnit.cooldown}/${CurrentDisplayUnit.cooldownMax}`);
-		else if (CurrentDisplayUnit.isFighter) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, CurrentDisplayUnit.order, `${CurrentDisplayUnit.targetX}, ${CurrentDisplayUnit.targetY}`, CurrentDisplayUnit.targetUnit, `${CurrentDisplayUnit.cooldown}/${CurrentDisplayUnit.cooldownMax}`);
+		else if (CurrentDisplayUnit.isAttackingUnit) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, CurrentDisplayUnit.order, `${CurrentDisplayUnit.targetX}, ${CurrentDisplayUnit.targetY}`, CurrentDisplayUnit.targetUnit, `${CurrentDisplayUnit.cooldown}/${CurrentDisplayUnit.cooldownMax}`);
 		else if (CurrentDisplayUnit.isResourceNode) render(CurrentDisplayUnit, CurrentDisplayUnit.order, `${CurrentDisplayUnit.targetX}, ${CurrentDisplayUnit.targetY}`, CurrentDisplayUnit.targetUnit, CurrentDisplayUnit.remainingResources);
 		else if (!CurrentDisplayUnit.isMobile) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, CurrentDisplayUnit.order);
 		else render(CurrentDisplayUnit, CurrentDisplayUnit.order, `${CurrentDisplayUnit.targetX}, ${CurrentDisplayUnit.targetY}`, CurrentDisplayUnit.targetUnit);
+	}
 
+	if (refreshButtons) {
+		trainButtonsElement.innerHTML = "";
 		if (CurrentDisplayUnit.unitsTrained) {
 			CurrentDisplayUnit.unitsTrained.forEach(type => {
 				const unitTypeData = GetUnitTypeData(type);
@@ -714,7 +776,7 @@ function CreateNewGameEvent(id = null) {
 	const eventElement = document.createElement("span");
 	eventElement.innerText = newEvent.message;
 
-	if (newEvent.id == GameEvent.PirateInvasion) {
+	if (newEvent.id == GameEvent.PirateInvasion && HumanPlayerTownHall) {
 		const units = CreateUnitsInArea(2, Type.Fighter, PLAYER_ENEMY, WORLD_SIZE*0.9, WORLD_SIZE*0.9);
 		units.forEach(unitElm => unitElm.orderAttackMoveToPoint(HumanPlayerTownHall.centerX, HumanPlayerTownHall.centerY))
 	}
@@ -728,7 +790,7 @@ function CreateNewGameEvent(id = null) {
 }
 
 function Tick(ms) {
-	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.update());
+	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.Update());
 
 	tooltipElement.classList.toggle("visible", TooltipDisplaying);
 	tooltipElement.style.left = px(mouseClientX);
@@ -768,7 +830,9 @@ document.addEventListener("DOMContentLoaded", evt => {
 
 		if (evt.target.tagName.toLowerCase() == "button") {
 			if (evt.target.dataset.constructType) CurrentBuildingPlaceType = evt.target.dataset.constructType;
-			if (evt.target.dataset.trainType && CurrentDisplayUnit) CurrentDisplayUnit.trainUnit(evt.target.dataset.trainType);
+			if (evt.target.dataset.trainType && CurrentDisplayUnit) {
+				CurrentDisplayUnit.trainUnit(evt.target.dataset.trainType);
+			}
 			return;
 		}
 
@@ -816,6 +880,8 @@ document.addEventListener("DOMContentLoaded", evt => {
 	})
 
 	document.addEventListener("keyup", evt => {
+		if (evt.key == "s" && GetSelectedUnit()) GetSelectedUnit().stop();
+
 		Object.keys(UnitTypeData).forEach(type => {
 			if (evt.key.toLowerCase() == GetUnitTypeData(type).hotkey) {
 				const data = GetUnitTypeData(type);
@@ -841,7 +907,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 		GetSelectedUnits().forEach(unitElm => {
 			if (unitElm.isMobile) {
 				if (!evt.target || !UnitElement.isElementUnit(evt.target)) {
-					if (evt.ctrlKey) unitElm.orderAttackMoveToPoint(evt.pageX, evt.pageY);
+					if (evt.ctrlKey && unitElm.isAttackingUnit) unitElm.orderAttackMoveToPoint(evt.pageX, evt.pageY);
  					else unitElm.orderMoveToPoint(evt.pageX, evt.pageY);
 				}
 				else unitElm.orderInteractWithUnit(evt.target);

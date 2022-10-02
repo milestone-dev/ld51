@@ -149,8 +149,6 @@ body {
 
 x-unit {
 	position: absolute;
-	transition: top 1000s, left 1000s, rotate 1s;
-	transition-timing-function: linear;
 }
 
 x-unit.selected {
