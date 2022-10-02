@@ -234,6 +234,16 @@ x-unit.selected x-overlay {
 #buildingPlacementGhost.valid {
 	background-color: rgba(255,255,255, 0.1);
 }
+#selectionRectangle {
+	position: absolute;
+	display: none;
+	border: 2px solid #888;
+	pointer-events: none;
+	z-index: 1000000;
+}
+#selectionRectangle.visible {
+	display: block;
+}
 
 #tooltip {
 	position: fixed;

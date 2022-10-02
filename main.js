@@ -70,7 +70,7 @@ AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", "Cost: 400. Prim
 AddUnitTypeData(Type.PowerExtender, "Power Extender", "p", "📍", "Cost: 100. Extends power range to allow base expansion.", UNIT_SIZE_MEDIUM, {isBuilding: true, cost:100, elevation:500, visionRange:TILE*8, buildTime:30, hp:200, priority:100, powerRange:TILE*8});
 AddUnitTypeData(Type.StaticDefense, "Tesla Coil Defense", "d", "🗼", "Cost: 200. Primary static defense structure.", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:200, elevation:500, visionRange:TILE*15, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", "", UNIT_SIZE_LARGE);
-AddUnitTypeData(Type.Powerup, "Precursor Artefact", "a", "🗿", "", UNIT_SIZE_SMALL);
+AddUnitTypeData(Type.Artefact, "Precursor Artefact", "a", "🗿", "", UNIT_SIZE_SMALL);
 
 const GameEvent = {
 	NewResource: "NewResource",
@@ -81,7 +81,7 @@ const GameEvent = {
 	RivalMiners: "RivalMiners",
 	WarpRift: "WarpRift",
 	IonStorm: "IonStorm",
-	Artefact: "Artefact",
+	ArtefactDiscovery: "ArtefactDiscovery",
 	Reinforcements: "Reinforcements",
 	MoraleBoost: "MoraleBoost",
 	MoraleLoss: "MoraleLoss",
@@ -98,7 +98,7 @@ AddGameEventData(GameEvent.PirateInvasion, "Pirates vessels sighted in the secto
 AddGameEventData(GameEvent.AlienInvasion, "Alien presence discovered", 10);
 AddGameEventData(GameEvent.WarpRift, "Brace for warp rift", 10);
 AddGameEventData(GameEvent.IonStorm, "Brace for incoming Ion storm", 10);
-AddGameEventData(GameEvent.Artefact, "Precursor Artefact has been discoreved", 10);
+AddGameEventData(GameEvent.ArtefactDiscovery, "Precursor Artefact has been discoreved", 10);
 AddGameEventData(GameEvent.Reinforcements, "Reinforcements have arrived", 10);
 AddGameEventData(GameEvent.MoraleBoost, "Morale is surging. Worker speed increased by 10%.", 10);
 AddGameEventData(GameEvent.MoraleLoss, "Worker morale has taken a hit. Worker speed decreased by 20%", 10);
@@ -109,7 +109,7 @@ var UNIT_ID = 0;
 var mouseX, mouseY, mouseDown, mousePlaceX, mousePlaceY, mouseClientX, mouseClientY;
 var worldElement, uiElement, unitInfoElement, trainButtonsElement, buildBarElement,
 statusBarElement, minimapElement, eventInfoElement, buildingPlacementGhostElement,
-fogContainerElement,fogMaskElement,fogContainerMMElement,fogMaskMMElement, minimapViewPortElement;
+fogContainerElement,fogMaskElement,fogContainerMMElement,fogMaskMMElement, minimapViewPortElement, selectionRectangleElement;
 var PlayerResources = [0, 0, 0, 0];
 var eventInterval;
 var HumanPlayerTownHall = null;
@@ -117,6 +117,11 @@ var CurrentBuildingPlaceType = null;
 var CurrentDisplayUnit = null;
 var CurrentBuildingPlacemenValid = false;
 var TooltipDisplaying = false;
+var SelectionRectangleDisplaying = false;
+var SelectionRectangleTop = 0;
+var SelectionRectangleLeft = 0;
+var SelectionRectangleWidth = 0;
+var SelectionRectangleHeight = 0;
 
 const log = console.log;
 
@@ -164,7 +169,7 @@ class UnitElement extends HTMLElement {
 	Setup(type, playerID) {
 		this.id = `unit-${UNIT_ID++}`;
 		this.type = type;
-		if (type == Type.ResourceNode || type == Type.Powerup) playerID = PLAYER_NEUTRAL;
+		if (type == Type.ResourceNode || type == Type.Artefact) playerID = PLAYER_NEUTRAL;
 		this.playerID = playerID;
 		const data = GetUnitTypeData(this.type);
 		Object.keys(data).forEach(key => this[key] = data[key]);
@@ -229,13 +234,14 @@ class UnitElement extends HTMLElement {
 	get isMobile() {return this.moveSpeed > 0; }
 	get isNeutral() {return this.playerID == PLAYER_NEUTRAL; }
 	get isHarvester() {return this.type == Type.Harvester; }
-	get isPowerup() {return this.type == Type.Powerup; }
+	get isPowerup() {return this.type == Type.Artefact; }
 	get isAttackingUnit() {return this.attackDamage > 0; }
 	get isStaticDefense() {return this.type == Type.StaticDefense; }
 	get isResourceNode() {return this.type == Type.ResourceNode; }
 	get isResoruceDepot() {return this.type == Type.ResourceDepot; }
 	get providesPower() {return this.powerRange > 0; }
 	get requiresPower() {return this.isBuilding; }
+	get isSingleSelect() {return this.isBuilding;}
 
 	providesPowerAtPoint(x, y) {
 		if (!this.providesPower) return false;
@@ -606,6 +612,7 @@ function SetupGame() {
 
 	unitInfoElement = document.getElementById("unitInfo");
 	tooltipElement = document.getElementById("tooltip");
+	selectionRectangleElement = document.getElementById("selectionRectangle");
 	trainButtonsElement = document.getElementById("trainButtons");
 	statusBarElement = document.getElementById("statusBar");
 	worldElement = document.getElementById("world");
@@ -637,10 +644,11 @@ function SetupGame() {
 	eventInterval = window.setInterval(HandleNewGameEvent, GAME_EVENT_INTERVAL);
 	window.setInterval(UpdateUI, GAME_UI_REFRESH_INTERVAL);
 	window.setInterval(e => UpdateUnitInfo(true), GAME_UI_REFRESH_INTERVAL);
+	window.setTimeout(e => {
+		window.scrollTo(WORLD_SIZE/2 - window.innerWidth/2, WORLD_SIZE/2 - window.innerHeight/2);
+	}, 100);
 
-
-
-	if (true) {
+	if (false) {
 		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 250, WORLD_SIZE/2 + 200);
 		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 200, WORLD_SIZE/2 - 250);
 		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
@@ -665,6 +673,7 @@ function SetupGame() {
 		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
 		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
 	}
+
 
 	window.requestAnimationFrame(Tick);
 	// CreateUnit(Type.StaticDefense, PLAYER_HUMAN, 550, 350);
@@ -895,6 +904,11 @@ function HandleNewGameEvent(id = null) {
 			eventY = HumanPlayerTownHall.centerX;
 			CreateUnitsInArea(1, Type.Fighter, PLAYER_HUMAN, eventX, eventY);
 		break;
+		case GameEvent.ArtefactDiscovery:
+			eventX = GetRandomWorldPoint();
+			eventY = GetRandomWorldPoint();
+			CreateUnitsInArea(1, Type.Artefact, PLAYER_NEUTRAL, eventX, eventY);
+		break;
 	}
 
 	if (!Number.isNaN(eventX) && !Number.isNaN(eventY)) {
@@ -908,6 +922,14 @@ function UpdateUI() {
 	statusBarElement.innerText = `💎 ${PlayerResources[PLAYER_HUMAN]}`;
 }
 
+function SelectUnitsInRectangle(x, y, w, h, add=false) {
+	log(x,y,w,y,add);
+	if (!add) DeselectAllUnits();
+	GetAllPlayerUnits(PLAYER_HUMAN)
+	.filter(unitElm => (!unitElm.isSingleSelect && unitElm.centerX >= x && unitElm.centerX <= x+w && unitElm.centerY >= y && unitElm.centerY <= y+h))
+	.forEach(unitElm => unitElm.select());
+}
+
 function Tick(ms) {
 	GetAllUnits().forEach(unitElm => unitElm.Update());
 
@@ -915,6 +937,14 @@ function Tick(ms) {
 	if (TooltipDisplaying) {
 		tooltipElement.style.left = px(mouseClientX);
 		tooltipElement.style.top = px(mouseClientY);
+	}
+
+	selectionRectangleElement.classList.toggle("visible", SelectionRectangleDisplaying);
+	if (SelectionRectangleDisplaying) {
+		selectionRectangleElement.style.top = px(SelectionRectangleTop);
+		selectionRectangleElement.style.left = px(SelectionRectangleLeft);
+		selectionRectangleElement.style.width = px(SelectionRectangleWidth);
+		selectionRectangleElement.style.height = px(SelectionRectangleHeight);
 	}
 
 	document.body.classList.toggle("showPowerRange", CurrentBuildingPlaceType);
@@ -974,8 +1004,28 @@ document.addEventListener("DOMContentLoaded", evt => {
 		}
 	});
 
-	document.addEventListener("mousedown", evt => mouseDown = true);
-	document.addEventListener("mouseup", evt => mouseDown = false);
+	document.addEventListener("mousedown", evt => {
+		mouseDown = true;
+		if (evt.button == 0 && (evt.target == worldElement || evt.target.tagName.toLowerCase() == UNIT_SELECTOR)) {
+			SelectionRectangleDisplaying = true;
+			SelectionRectangleTop = evt.pageY;
+			SelectionRectangleLeft = evt.pageX;
+			SelectionRectangleHeight = 0;
+			SelectionRectangleWidth = 0;
+			// console.log("PLACE", SelectionRectangleTop, SelectionRectangleLeft);
+		}
+	});
+	document.addEventListener("mouseup", evt => {
+		mouseDown = false;
+		if (SelectionRectangleDisplaying) {
+			SelectUnitsInRectangle(SelectionRectangleLeft, SelectionRectangleTop, SelectionRectangleWidth, SelectionRectangleHeight, evt.shiftKey);
+			SelectionRectangleDisplaying = false;
+			SelectionRectangleTop = 0;
+			SelectionRectangleLeft = 0;
+			SelectionRectangleHeight = 0;
+			SelectionRectangleWidth = 0;
+		}
+	});
 
 	document.addEventListener("mouseover", evt => {
 		if (evt.target.tagName.toLowerCase() == "button" && evt.target.dataset.tooltip) {
@@ -988,6 +1038,17 @@ document.addEventListener("DOMContentLoaded", evt => {
 	document.addEventListener("mousemove", evt => {
 		mouseX = evt.pageX;
 		mouseY = evt.pageY;
+		if (SelectionRectangleDisplaying) {
+			SelectionRectangleWidth = evt.pageX - SelectionRectangleLeft;
+			SelectionRectangleHeight = evt.pageY - SelectionRectangleTop;
+			console.log(
+				"top", SelectionRectangleTop,
+				"left", SelectionRectangleLeft,
+				"width", SelectionRectangleWidth,
+				"height", SelectionRectangleWidth
+			);
+
+		}
 		mousePlaceX = Math.floor(mouseX/TILE)*TILE;
 		mousePlaceY = Math.floor(mouseY/TILE)*TILE;
 		mouseClientX = evt.clientX;
