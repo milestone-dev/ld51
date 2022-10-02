@@ -86,6 +86,15 @@ button {
 	font-size: 18px;
 	white-space: nowrap;
 	text-align: right;
+	line-height: 24px;
+}
+
+#statusBar img {
+	margin: 0 10px 0 0;
+}
+
+#statusBar span {
+	line-height: 24px;
 }
 
 #messageBar {
@@ -167,6 +176,7 @@ button {
 #unitPortrait {
 	width: 100%;
 	image-rendering: pixelated;
+	background: #111;
 }
 
 #eventInfo {

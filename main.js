@@ -42,8 +42,9 @@ const MESSAGE_HIDE_TIMEOUT = 3000;
 const USE_FOW = false;
 const SVGNS = "http://www.w3.org/2000/svg";
 const RESOURCE_GOAL = 100000;
+const PLAYER_START_RESOURCES = 50;
 
-const RESOURCE_CARRY_AMOUNT_MAX = 50;
+const RESOURCE_CARRY_AMOUNT_MAX = 8;
 
 const Type = {
 	Undefined: "Undefined",
@@ -71,8 +72,8 @@ function AddUnitTypeData(type, name, hotkey, icon, tooltip, size, data = {}) {
 	if (!data.visionRange) UnitTypeData[type].visionRange = UNIT_DEFAULT_VISION;
 	if (!data.ackResponses) UnitTypeData[type].ackResponses = 0;
 	if (!data.whatResponses) UnitTypeData[type].visionRange = 0;
-	if (!data.attackHitSprite) UnitTypeData[type].attackHitSprite = "LaserHit";
-	if (!data.explosionSprite) UnitTypeData[type].attackHitSprite = "Explosion";
+	if (!data.attackHitSprite) UnitTypeData[type].attackHitSprite = "BeamHit";
+	if (!data.explosionSprite) UnitTypeData[type].explosionSprite = "Explosion";
 }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
 AddUnitTypeData(Type.Harvester, "Miner", "h", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, visionRange:TILE*8, moveSpeed:2, attackRange:MINING_RANGE, cooldownMax:10});
@@ -85,27 +86,27 @@ AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", "", UNIT_SIZE_LARGE)
 AddUnitTypeData(Type.Artefact, "Precursor Artefact", "a", "🗿", "", UNIT_SIZE_SMALL);
 AddUnitTypeData(Type.DerelictStation, "Derelict Station", "", "✈️", "", UNIT_SIZE_XLARGE);
 
-AddUnitTypeData(Type.AlienAffliction, "Affliction", null, "🦇", "", UNIT_SIZE_SMALL, {elevation:1000, hp:25, priority:25, visionRange:TILE*12, moveSpeed:3, attackDamage:2, attackRange:TILE*6, cooldownMax:7});
+AddUnitTypeData(Type.AlienAffliction, "Affliction", null, "🦇", "", UNIT_SIZE_SMALL, {elevation:1000, hp:25, priority:25, visionRange:TILE*12, moveSpeed:3, attackDamage:2, attackRange:TILE*6, cooldownMax:7, attackHitSprite:"VenomHit"});
 AddUnitTypeData(Type.AlienGorger, "Gorger", null, "🐉", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:1, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
-AddUnitTypeData(Type.PirateRaider, "Raider", null, "🛸", "", UNIT_SIZE_MEDIUM, {elevation:1000, hp:100, priority:25, visionRange:TILE*12, moveSpeed:2.5, attackDamage:8, attackRange:TILE*4, cooldownMax:10});
+AddUnitTypeData(Type.PirateRaider, "Raider", null, "🛸", "", UNIT_SIZE_MEDIUM, {elevation:1000, hp:100, priority:25, visionRange:TILE*12, moveSpeed:2.5, attackDamage:8, attackRange:TILE*4, cooldownMax:10, attackHitSprite:"LaserHit"});
 AddUnitTypeData(Type.PirateMarauder, "Marauder", null, "🛩", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:1, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
 
 
 
 const GameEvent = {
-	NewResource: "NewResource",
+	// NewResource: "NewResource",
 	DerelictStation: "DerelictStation",
-	MapScan: "MapScan",
+	// MapScan: "MapScan",
 	PirateInvasion: "PirateInvasion",
 	AlienInvasion: "AlienInvasion",
 	RivalMiners: "RivalMiners",
-	WarpRift: "WarpRift",
-	IonStorm: "IonStorm",
+	// WarpRift: "WarpRift",
+	// IonStorm: "IonStorm",
 	ArtefactDiscovery: "ArtefactDiscovery",
 	Reinforcements: "Reinforcements",
-	MoraleBoost: "MoraleBoost",
-	MoraleLoss: "MoraleLoss",
-	NetworkError: "NetworkError",
+	// MoraleBoost: "MoraleBoost",
+	// MoraleLoss: "MoraleLoss",
+	// NetworkError: "NetworkError",
 } 
 const GameEventData = {}
 var GameEvents = [];
@@ -270,7 +271,7 @@ class UnitElement extends HTMLElement {
 	get isMobile() {return this.moveSpeed > 0; }
 	get isNeutral() {return this.playerID == PLAYER_NEUTRAL; }
 	get isHarvester() {return this.type == Type.Harvester; }
-	get isPowerup() {return this.type == Type.Artefact; }
+	get isPowerup() {return this.type == Type.Artefact || this.type == Type.DerelictStation; }
 	get isAttackingUnit() {return this.attackDamage > 0; }
 	get isStaticDefense() {return this.type == Type.StaticDefense; }
 	get isResourceNode() {return this.type == Type.ResourceNode; }
@@ -495,6 +496,8 @@ class UnitElement extends HTMLElement {
 	pickupUnit(unitElm) {
 		if (!unitElm.isPowerup) return;
 		// TODO add bonus for retrieval
+		if (unitElm.type == Type.Artefact) PlayerResources[this.playerID] += 500;
+		else if (unitElm.type == Type.DerelictStation) PlayerResources[this.playerID] += 1000;
 		if (this.visionElement) this.visionElement.remove();
 		unitElm.remove();
 	}
@@ -630,7 +633,7 @@ class UnitElement extends HTMLElement {
 			if (this.targetUnit && this.targetUnit.isActive) {
 				if (this.cooldown <= 0) {
 					this.playAttackAudio();
-					this.targetUnit.createSpriteEffect(this.attackHitSprite);
+					if (this.attackHitSprite) this.targetUnit.createSpriteEffect(this.attackHitSprite);
 					this.targetUnit.hp -= this.attackDamage;
 					this.cooldown = this.cooldownMax;
 				} else this.cooldown--;
@@ -697,7 +700,7 @@ function SetupGame() {
 	tooltipElement = document.getElementById("tooltip");
 	selectionRectangleElement = document.getElementById("selectionRectangle");
 	trainButtonsElement = document.getElementById("trainButtons");
-	statusBarElement = document.getElementById("statusBar");
+	statusBarElement = document.getElementById("statusBarText");
 	worldElement = document.getElementById("world");
 	uiElement = document.getElementById("ui");
 	eventInfoElement = document.getElementById("eventInfo");
@@ -742,7 +745,13 @@ function EnterMainMenu() {
 	MusicAudio.play();
 }
 
+function LoseGame() {
+	GameStarted = false;
+	Pause();
+}
+
 function StartNewGame() {
+	GetAllUnits().forEach(unitElm => unitElm.remove());
 	GameStarted = true;
 	Difficulty = 0;
 	EventTimer = 0;
@@ -765,10 +774,10 @@ function StartNewGame() {
 			CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, GetRandomWorldPoint(), GetRandomWorldPoint());
 		}
 
-		for (var i = 0; i < 3; i++) {
-			const unit = CreateUnit(Type.Interceptor, PLAYER_ENEMY, GetRandomWorldPoint(), GetRandomWorldPoint());
-			unit.orderToPatrolInArea();
-		}
+		// for (var i = 0; i < 3; i++) {
+		// 	const unit = CreateUnit(Type.AlienAffliction, PLAYER_ENEMY, GetRandomWorldPoint(), GetRandomWorldPoint());
+		// 	unit.orderToPatrolInArea();
+		// }
 	} else {
 		HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
 		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
@@ -778,7 +787,7 @@ function StartNewGame() {
 	Resume();
 	UpdateMinimap();
 	UpdateUI();
-	PlayerResources[PLAYER_HUMAN] = 1000;
+	PlayerResources[PLAYER_HUMAN] = PLAYER_START_RESOURCES;
 }
 
 function Log(...args) {
@@ -1005,13 +1014,13 @@ function TriggerNewGameEvent(id = null) {
 			eventX = GetRandomWorldPointAtEdge();
 			eventY = GetRandomWorldPointAtEdge();
 			CreateUnitsInArea(CalculateSpawnAmount(2), Type.PirateRaider, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderAttackMoveToPoint(WORLD_SIZE/2,WORLD_SIZE/2))
-			if (Difficulty > 10) CreateUnitsInArea(CalculateSpawnAmount(1), Type.PirateMarauder, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderAttackMoveToPoint(WORLD_SIZE/2, WORLD_SIZE/2))
+			// if (Difficulty > 10) CreateUnitsInArea(CalculateSpawnAmount(1), Type.PirateMarauder, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderAttackMoveToPoint(WORLD_SIZE/2, WORLD_SIZE/2))
 		break;
 		case GameEvent.AlienInvasion:
 			eventX = GetRandomWorldPoint();
 			eventY = GetRandomWorldPoint();
 			CreateUnitsInArea(CalculateSpawnAmount(3), Type.AlienAffliction, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderToPatrolInArea())
-			CreateUnitsInArea(CalculateSpawnAmount(1), Type.AlienGorger, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderToPatrolInArea())
+			// CreateUnitsInArea(CalculateSpawnAmount(1), Type.AlienGorger, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderToPatrolInArea())
 		break;
 		case GameEvent.RivalMiners:
 			eventX = GetRandomWorldPointNearEdge();
@@ -1052,7 +1061,7 @@ function TriggerNewGameEvent(id = null) {
 
 function UpdateUI() {
 	if (Paused) return;
-	statusBarElement.innerText = `💎 ${PlayerResources[PLAYER_HUMAN]}`;
+	statusBarElement.innerText = `${PlayerResources[PLAYER_HUMAN]}`;
 }
 
 function SelectUnitsInRectangle(x, y, w, h, add=false) {
@@ -1082,6 +1091,7 @@ function Tick(ms) {
 			Pause();
 			victorySplashElement.classList.add("visible");
 		}
+		if (GetAllPlayerUnits(PLAYER_HUMAN).length == 0) LoseGame();
 		GetAllUnits().forEach(unitElm => unitElm.Update());
 
 		tooltipElement.classList.toggle("visible", TooltipDisplaying);
@@ -1132,7 +1142,8 @@ document.addEventListener("DOMContentLoaded", evt => {
 		if (!evt.target) return;
 
 		if (evt.target == splashElement) EnterMainMenu();
-		if (evt.target == mainMenuButtonElement) Pause();
+		else if (evt.target == mainMenuButtonElement) Pause();
+		else if (evt.target == victorySplashElement) EnterMainMenu();
 		else if (evt.target == mainMenuResumeButtonElement) Resume();
 		else if (evt.target == mainMenuNewGameButtonElement) StartNewGame();
 
@@ -1238,8 +1249,8 @@ document.addEventListener("DOMContentLoaded", evt => {
 		selectedUnits.forEach(unitElm => {
 			if (unitElm.playerID == PLAYER_HUMAN && unitElm.isMobile) {
 				if (evt.target == minimapElement) {
-					if (evt.ctrlKey && unitElm.isAttackingUnit) unitElm.orderAttackMoveToPoint(evt.offsetX * MINIMAP_SCALE, evt.offsetX * MINIMAP_SCALE);
- 					else unitElm.orderMoveToPoint(evt.offsetX * MINIMAP_SCALE, evt.offsetX * MINIMAP_SCALE);
+					if (evt.ctrlKey && unitElm.isAttackingUnit) unitElm.orderAttackMoveToPoint(evt.offsetX * MINIMAP_SCALE, evt.offsetY * MINIMAP_SCALE);
+ 					else unitElm.orderMoveToPoint(evt.offsetX * MINIMAP_SCALE, evt.offsetY * MINIMAP_SCALE);
 				} else {
 					if (!evt.target || !UnitElement.isElementUnit(evt.target)) {
 						if (evt.ctrlKey && unitElm.isAttackingUnit) unitElm.orderAttackMoveToPoint(evt.pageX, evt.pageY);
