@@ -32,7 +32,7 @@ const FIGHER_SEARCH_RANGE = TILE * 10;
 const PLAYER_NEUTRAL = 0;
 const PLAYER_HUMAN = 1;
 const PLAYER_ENEMY = 2;
-const PATROL_RANGE = TILE;
+const PATROL_RANGE = TILE*8;
 const MINIMAP_SCALE = 64;
 const WORLD_SIZE = 128*64;
 const EXPLOSION_SPRITE_TIMEOUT = 300;
@@ -56,7 +56,7 @@ function AddUnitTypeData(type, name, hotkey, icon, tooltip, size, data = {}) {
 	Object.keys(data).forEach(key => UnitTypeData[type][key] = data[key]);
 }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
-AddUnitTypeData(Type.Harvester, "Miner Droid", "h", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, moveSpeed:200, attackRange:MINING_RANGE, cooldownMax:10});
+AddUnitTypeData(Type.Harvester, "Miner pod", "h", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, moveSpeed:200, attackRange:MINING_RANGE, cooldownMax:10});
 AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", "Cost: 50. Primary fighter unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, moveSpeed:200, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
 AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", "Cost: 400. Primary resource depot and harvester training facility.", UNIT_SIZE_XLARGE, {isBuilding:true, cost:400, elevation:500, buildTime:30, hp:1000, priority:300, powerRange:TILE*10, unitsTrained:[Type.Harvester, Type.Fighter]});
 AddUnitTypeData(Type.PowerExtender, "Power Extender", "p", "📍", "Cost: 100. Extends power range to allow base expansion.", UNIT_SIZE_MEDIUM, {isBuilding: true, cost:100, elevation:500, buildTime:30, hp:200, priority:100, powerRange:TILE*8});
@@ -131,6 +131,8 @@ class UnitElement extends HTMLElement {
 		this.targetUnit = null;
 		this.targetX = Number.NaN;
 		this.targetY = Number.NaN;
+		this.patrolOriginX = Number.NaN;
+		this.patrolOriginY = Number.NaN;
 
 		// Harvester specific
 		this.resourceCarryAmount = 0;
@@ -297,6 +299,8 @@ class UnitElement extends HTMLElement {
 		this.targetX = Number.NaN;
 		this.targetY = Number.NaN;
 		this.order = Order.Idle;
+		this.patrolOriginX = Number.NaN;
+		this.patrolOriginY = Number.NaN;
 	}
 
 	orderMoveToPoint(targetX, targetY) {
@@ -341,9 +345,13 @@ class UnitElement extends HTMLElement {
 	}
 
 	orderToPatrolInArea() {
+		if (Number.isNaN(this.patrolOriginX)) this.patrolOriginX = this.centerX;
+		if (Number.isNaN(this.patrolOriginY)) this.patrolOriginY = this.centerY;
 		this.order = Order.PatrolArea;
-		const x = this.centerX - PATROL_RANGE + Math.random()*PATROL_RANGE;
-		const y = this.centerY - PATROL_RANGE + Math.random()*PATROL_RANGE;
+		const x = this.patrolOriginX - PATROL_RANGE + Math.random()*PATROL_RANGE;
+		const y = this.patrolOriginY - PATROL_RANGE + Math.random()*PATROL_RANGE;
+		this.targetX = x;
+		this.targetY = y;
 		this.travelToPoint(x, y);
 	}
 
@@ -530,9 +538,19 @@ function SetupGame() {
 	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 250, WORLD_SIZE/2 - 150);
 	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 150, WORLD_SIZE/2 + 250);
 	HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
+	CreateUnit(Type.StaticDefense, PLAYER_HUMAN, WORLD_SIZE/2 + TILE*4, WORLD_SIZE/2 + TILE*4);
 	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 + 100);
 	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 - 100);
 	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 - 100, WORLD_SIZE/2 + 100);
+
+	for (var i = 0; i < 100; i++) {
+		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
+	}
+
+	for (var i = 0; i < 10; i++) {
+		const unit = CreateUnit(Type.Fighter, PLAYER_ENEMY, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
+		unit.orderToPatrolInArea();
+	}
 
 	window.requestAnimationFrame(Tick);
 	// CreateUnit(Type.StaticDefense, PLAYER_HUMAN, 550, 350);
@@ -646,7 +664,7 @@ function UpdateMinimap() {
 	minimapElement.appendChild(viewportElm);
 }
 
-function UpdateUnitInfo() {
+function UpdateUnitInfo(force=false) {
 	const selectedUnit = GetSelectedUnit();
 	// if (CurrentDisplayUnit != selectedUnit)
 	const render = function(...args) {
@@ -659,7 +677,7 @@ function UpdateUnitInfo() {
 		return;
 	}
 
-	if (selectedUnit && CurrentDisplayUnit != selectedUnit) {
+	if (selectedUnit && (force || CurrentDisplayUnit != selectedUnit)) {
 		CurrentDisplayUnit = selectedUnit;
 		unitInfoElement.innerHTML = "";
 		trainButtonsElement.innerHTML = "";
@@ -696,8 +714,13 @@ function CreateNewGameEvent(id = null) {
 	eventElement.innerText = newEvent.message;
 
 	if (newEvent.id == GameEvent.PirateInvasion) {
-		const units = CreateUnitsInArea(10, Type.Fighter, PLAYER_ENEMY, WORLD_SIZE*0.9, WORLD_SIZE*0.9);
+		const units = CreateUnitsInArea(2, Type.Fighter, PLAYER_ENEMY, WORLD_SIZE*0.9, WORLD_SIZE*0.9);
 		units.forEach(unitElm => unitElm.orderAttackMoveToPoint(HumanPlayerTownHall.centerX, HumanPlayerTownHall.centerY))
+	}
+
+	if (newEvent.id == GameEvent.AlienInvasion) {
+		const units = CreateUnitsInArea(3, Type.Fighter, PLAYER_ENEMY, Math.random() * WORLD_SIZE, Math.random() * WORLD_SIZE);
+		units.forEach(unitElm => unitElm.orderToPatrolInArea())
 	}
 
 	eventInfoElement.appendChild(eventElement);
@@ -761,7 +784,6 @@ document.addEventListener("DOMContentLoaded", evt => {
 	document.addEventListener("mouseup", evt => mouseDown = false);
 
 	document.addEventListener("mouseover", evt => {
-		console.log(evt.target);
 		if (evt.target.tagName.toLowerCase() == "button" && evt.target.dataset.tooltip) {
 			tooltipElement.innerHTML = evt.target.dataset.tooltip;
 			TooltipDisplaying = true;
@@ -777,12 +799,10 @@ document.addEventListener("DOMContentLoaded", evt => {
 		mouseClientX = evt.clientX;
 		mouseClientY = evt.clientY;
 
-		// if (mouseDown && evt.target == minimapElement) {
-		// 	window.scrollX = evt.offsetX * MINIMAP_SCALE;
-		// 	window.scrollY = evt.offsetY * MINIMAP_SCALE;
-		// 	log(evt);
-		// 	UpdateMinimap();
-		// }
+		if (mouseDown && evt.target == minimapElement) {
+			window.scrollTo(evt.offsetX * MINIMAP_SCALE - window.innerWidth/2, evt.offsetY * MINIMAP_SCALE - window.innerHeight/2);
+			UpdateMinimap();
+		}
 	})
 
 	document.addEventListener("keyup", evt => {
