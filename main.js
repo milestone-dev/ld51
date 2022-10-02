@@ -71,10 +71,11 @@ AddUnitTypeData(Type.PowerExtender, "Power Extender", "p", "📍", "Cost: 100. E
 AddUnitTypeData(Type.StaticDefense, "Tesla Coil Defense", "d", "🗼", "Cost: 200. Primary static defense structure.", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:200, elevation:500, visionRange:TILE*15, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", "", UNIT_SIZE_LARGE);
 AddUnitTypeData(Type.Artefact, "Precursor Artefact", "a", "🗿", "", UNIT_SIZE_SMALL);
+AddUnitTypeData(Type.DerelictShip, "Derelict Ship", "", "✈️", "", UNIT_SIZE_LARGE);
 
 const GameEvent = {
 	NewResource: "NewResource",
-	ShipwreckCall: "ShipwreckCall",
+	DerelictShip: "DerelictShip",
 	MapScan: "MapScan",
 	PirateInvasion: "PirateInvasion",
 	AlienInvasion: "AlienInvasion",
@@ -92,7 +93,7 @@ var GameEvents = [];
 function AddGameEventData(id, message, weight) {GameEventData[id] = {id, message, weight}; }
 function GetGameEvent(id) { return GameEventData[id]; }
 AddGameEventData(GameEvent.NewResource, "A new resource has been discovered", 10);
-AddGameEventData(GameEvent.ShipwreckCall, "Shipwrecked star travellers ask for help", 10);
+AddGameEventData(GameEvent.DerelictShip, "Shipwrecked star travellers ask for help", 10);
 AddGameEventData(GameEvent.MapScan, "Sector scanned", 10);
 AddGameEventData(GameEvent.PirateInvasion, "Pirates vessels sighted in the sector", 10);
 AddGameEventData(GameEvent.AlienInvasion, "Alien presence discovered", 10);
@@ -109,7 +110,10 @@ var UNIT_ID = 0;
 var mouseX, mouseY, mouseDown, mousePlaceX, mousePlaceY, mouseClientX, mouseClientY;
 var worldElement, uiElement, unitInfoElement, trainButtonsElement, buildBarElement,
 statusBarElement, minimapElement, eventInfoElement, buildingPlacementGhostElement,
-fogContainerElement,fogMaskElement,fogContainerMMElement,fogMaskMMElement, minimapViewPortElement, selectionRectangleElement;
+fogContainerElement,fogMaskElement,fogContainerMMElement,fogMaskMMElement, 
+minimapViewPortElement, selectionRectangleElement, mainMenuButtonElement, mainMenuResumeButtonElement, mainMenuNewGameButtonElement;
+
+
 var PlayerResources = [0, 0, 0, 0];
 var eventInterval;
 var HumanPlayerTownHall = null;
@@ -122,6 +126,8 @@ var SelectionRectangleTop = 0;
 var SelectionRectangleLeft = 0;
 var SelectionRectangleWidth = 0;
 var SelectionRectangleHeight = 0;
+var Paused = true;
+var GameStarted = false;
 
 const log = console.log;
 
@@ -620,6 +626,9 @@ function SetupGame() {
 	fogContainerElement = document.getElementById("fogContainer");
 	fogMaskElement = document.getElementById("fogMask");
 	
+	mainMenuButtonElement = document.getElementById("mainMenuButton");
+	mainMenuNewGameButtonElement = document.getElementById("mainMenuNewGameButton");
+	mainMenuResumeButtonElement = document.getElementById("mainMenuResumeButton");
 	
 	buildingPlacementGhostElement = document.getElementById("buildingPlacementGhost");
 	customElements.define(UNIT_SELECTOR, UnitElement);
@@ -636,16 +645,18 @@ function SetupGame() {
 		fogContainerMMElement.remove();
 	}
 
-	PlayerResources[PLAYER_HUMAN] = 100;
-	window.setInterval(UpdateMinimap, 100);
-	UpdateMinimap();
-	UpdateUI();
-	eventInterval = window.setInterval(HandleNewGameEvent, GAME_EVENT_INTERVAL);
+	// Core loops
 	window.setInterval(UpdateUI, GAME_UI_REFRESH_INTERVAL);
 	window.setInterval(e => UpdateUnitInfo(true), GAME_UI_REFRESH_INTERVAL);
-	window.setTimeout(e => {
-		window.scrollTo(WORLD_SIZE/2 - window.innerWidth/2, WORLD_SIZE/2 - window.innerHeight/2);
-	}, 100);
+	window.setInterval(UpdateMinimap, 100);
+	window.requestAnimationFrame(Tick);
+}
+
+function StartNewGame() {
+	
+	GameStarted = true;
+	GetAllUnits().forEach(unitElm => unitElm.remove());
+	window.setTimeout(e => window.scrollTo(WORLD_SIZE/2 - window.innerWidth/2, WORLD_SIZE/2 - window.innerHeight/2), 100);
 
 	if (false) {
 		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 250, WORLD_SIZE/2 + 200);
@@ -669,14 +680,18 @@ function SetupGame() {
 		}
 	} else {
 		HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
-		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
 		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
+		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
 	}
 
+	Resume();
+	UpdateMinimap();
+	UpdateUI();
 
-	window.requestAnimationFrame(Tick);
-	// CreateUnit(Type.StaticDefense, PLAYER_HUMAN, 550, 350);
-	// CreateUnit(Type.Harvester, PLAYER_ENEMY, 650, 450);
+	
+	eventInterval = window.setInterval(HandleNewGameEvent, GAME_EVENT_INTERVAL);
+	PlayerResources[PLAYER_HUMAN] = 100;
+	
 }
 
 function Log(...args) {
@@ -797,6 +812,7 @@ function PingMinimapAtPoint(x,y) {
 }
 
 function UpdateMinimap() {
+	if (Paused) return;
 	// minimapElement.innerHTML = "";
 	GetAllUnits().forEach(unitElm => {
 		// const mElm = document.createElement("div");
@@ -814,6 +830,7 @@ function UpdateMinimap() {
 }
 
 function UpdateUnitInfo(force=false) {
+	if (Paused) return;
 	const selectedUnit = GetSelectedUnit();
 	// if (CurrentDisplayUnit != selectedUnit)
 	const render = function(...args) {
@@ -908,6 +925,11 @@ function HandleNewGameEvent(id = null) {
 			eventY = GetRandomWorldPoint();
 			CreateUnitsInArea(1, Type.Artefact, PLAYER_NEUTRAL, eventX, eventY);
 		break;
+		case GameEvent.DerelictShip:
+			eventX = GetRandomWorldPoint();
+			eventY = GetRandomWorldPoint();
+			CreateUnitsInArea(1, Type.DerelictShip, PLAYER_NEUTRAL, eventX, eventY);
+		break;
 	}
 
 	if (!Number.isNaN(eventX) && !Number.isNaN(eventY)) {
@@ -918,6 +940,7 @@ function HandleNewGameEvent(id = null) {
 }
 
 function UpdateUI() {
+	if (Paused) return;
 	statusBarElement.innerText = `💎 ${PlayerResources[PLAYER_HUMAN]}`;
 }
 
@@ -928,41 +951,53 @@ function SelectUnitsInRectangle(x, y, w, h, add=false) {
 	.forEach(unitElm => unitElm.select());
 }
 
+function Pause() {
+	Paused = true;
+}
+
+function Resume() {
+	Paused = false;
+}
+
 function Tick(ms) {
-	GetAllUnits().forEach(unitElm => unitElm.Update());
+	document.body.classList.toggle("paused", Paused);
+	mainMenuResumeButtonElement.classList.toggle("visible", GameStarted);
+	if (!Paused) {
+		GetAllUnits().forEach(unitElm => unitElm.Update());
 
-	tooltipElement.classList.toggle("visible", TooltipDisplaying);
-	if (TooltipDisplaying) {
-		tooltipElement.style.left = px(mouseClientX);
-		tooltipElement.style.top = px(mouseClientY);
-	}
+		tooltipElement.classList.toggle("visible", TooltipDisplaying);
+		if (TooltipDisplaying) {
+			tooltipElement.style.left = px(mouseClientX);
+			tooltipElement.style.top = px(mouseClientY);
+		}
 
-	selectionRectangleElement.classList.toggle("visible", SelectionRectangleDisplaying);
-	if (SelectionRectangleDisplaying) {
-		selectionRectangleElement.style.top = px(SelectionRectangleTop);
-		selectionRectangleElement.style.left = px(SelectionRectangleLeft);
-		selectionRectangleElement.style.width = px(SelectionRectangleWidth);
-		selectionRectangleElement.style.height = px(SelectionRectangleHeight);
-	}
+		selectionRectangleElement.classList.toggle("visible", SelectionRectangleDisplaying);
+		if (SelectionRectangleDisplaying) {
+			selectionRectangleElement.style.top = px(SelectionRectangleTop);
+			selectionRectangleElement.style.left = px(SelectionRectangleLeft);
+			selectionRectangleElement.style.width = px(SelectionRectangleWidth);
+			selectionRectangleElement.style.height = px(SelectionRectangleHeight);
+		}
 
-	document.body.classList.toggle("showPowerRange", CurrentBuildingPlaceType);
-	buildingPlacementGhostElement.classList.toggle("visible", CurrentBuildingPlaceType);
-	if (CurrentBuildingPlaceType) {
-		CurrentBuildingPlacemenValid = GetAllPowerGenerators(PLAYER_HUMAN).some(elm => {return elm.providesPowerAtPoint(mousePlaceX,mousePlaceY)});
-		buildingPlacementGhostElement.classList.toggle("valid", CurrentBuildingPlacemenValid);
-		buildingPlacementGhostElement.style.left = px(mousePlaceX);
-		buildingPlacementGhostElement.style.top = px(mousePlaceY);
-	}
+		document.body.classList.toggle("showPowerRange", CurrentBuildingPlaceType);
+		buildingPlacementGhostElement.classList.toggle("visible", CurrentBuildingPlaceType);
+		if (CurrentBuildingPlaceType) {
+			CurrentBuildingPlacemenValid = GetAllPowerGenerators(PLAYER_HUMAN).some(elm => {return elm.providesPowerAtPoint(mousePlaceX,mousePlaceY)});
+			buildingPlacementGhostElement.classList.toggle("valid", CurrentBuildingPlacemenValid);
+			buildingPlacementGhostElement.style.left = px(mousePlaceX);
+			buildingPlacementGhostElement.style.top = px(mousePlaceY);
+		}
 
-	UpdateUnitInfo();
+		UpdateUnitInfo();
 
-	var scrollX = 0;
-	var scrollY = 0;
-	if (mouseClientX >= window.innerWidth - TILE * 2) scrollX += TILE/2;
-	if (mouseClientX <= TILE * 2) scrollX -= TILE/2;
-	if (mouseClientY >= window.innerHeight - TILE * 2) scrollY += TILE/2;
-	if (mouseClientY <= TILE * 2) scrollY -= TILE/2;
-	// if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX, scrollY);
+		var scrollX = 0;
+		var scrollY = 0;
+		if (mouseClientX >= window.innerWidth - TILE * 2) scrollX += TILE/2;
+		if (mouseClientX <= TILE * 2) scrollX -= TILE/2;
+		if (mouseClientY >= window.innerHeight - TILE * 2) scrollY += TILE/2;
+		if (mouseClientY <= TILE * 2) scrollY -= TILE/2;
+		// if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX, scrollY);
+	};
 
 	window.requestAnimationFrame(Tick);
 }
@@ -972,9 +1007,12 @@ document.addEventListener("DOMContentLoaded", evt => {
 	document.addEventListener("click", evt => {
 		if (!evt.target) return;
 
-		if (evt.target.id == "mainMenuButton") {
-			console.log("MENU");
-		}
+		console.log(evt.target.id);
+		if (evt.target == mainMenuButtonElement) Pause();
+		else if (evt.target == mainMenuResumeButtonElement) Resume();
+		else if (evt.target == mainMenuNewGameButtonElement) StartNewGame();
+
+		if (Paused) return;
 
 		if (evt.target.tagName.toLowerCase() == "button") {
 			if (evt.target.dataset.constructType) CurrentBuildingPlaceType = evt.target.dataset.constructType;
@@ -1089,6 +1127,8 @@ document.addEventListener("DOMContentLoaded", evt => {
 		return event.returnValue = "Are you sure you want to exit the current game?";
 	});
 
+	window.addEventListener("blur", evt => { Pause(); });
+	// window.addEventListener("focus", evt => { Resume(); });
 
 	SetupGame();
 });
