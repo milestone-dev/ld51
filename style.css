@@ -134,6 +134,7 @@ body {
 #eventInfo {
 	position: fixed;
 	width: 128px;
+	height: 256px;
 	bottom: 16px;
 	left: 16px;
 }

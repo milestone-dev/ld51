@@ -283,6 +283,7 @@ class UnitElement extends HTMLElement {
 	deselect() {this.classList.remove("selected"); }
 
 	travelToPoint(orderX, orderY) {
+		// console.log(orderX, orderY);
 		if (this.moveSpeed == 0) return;
 		const r = this.getBoundingClientRect();
 		const distance = this.distanceToPoint(orderX,orderY);
@@ -744,6 +745,15 @@ function Tick(ms) {
 
 	statusBarElement.innerText = `💎 ${PlayerResources[PLAYER_HUMAN]}`;
 	UpdateUnitInfo();
+
+	var scrollX = 0;
+	var scrollY = 0;
+	if (mouseClientX >= window.innerWidth - TILE * 2) scrollX += TILE/2;
+	if (mouseClientX <= TILE * 2) scrollX -= TILE/2;
+	if (mouseClientY >= window.innerHeight - TILE * 2) scrollY += TILE/2;
+	if (mouseClientY <= TILE * 2) scrollY -= TILE/2;
+	if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX, scrollY);
+
 	window.requestAnimationFrame(Tick);
 }
 
