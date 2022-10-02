@@ -609,20 +609,20 @@ function Log(...args) {
 	unitInfoElement.innerHTML = args.join("<br>");
 }
 
+function GetAllUnits() {
+	return worldElement.querySelectorAll(UNIT_SELECTOR);
+}
+
 function GetSelectedUnits() {
-	return document.querySelectorAll(UNIT_SELECTOR+".selected");
+	return worldElement.querySelectorAll(".selected");
 }
 
 function GetSelectedUnit() {
-	return document.querySelector(UNIT_SELECTOR+".selected");
-}
-
-function GetAllUnits() {
-	return document.querySelectorAll(UNIT_SELECTOR);
+	return worldElement.querySelector(".selected")
 }
 
 function DeselectAllUnits() {
-	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.classList.remove("selected"));
+	return worldElement.querySelectorAll(".selected").forEach(unitElm => unitElm.classList.remove("selected"));
 }
 
 function GetAllPowerGenerators(playerID) {
@@ -790,7 +790,7 @@ function CreateNewGameEvent(id = null) {
 }
 
 function Tick(ms) {
-	document.querySelectorAll(UNIT_SELECTOR).forEach(unitElm => unitElm.Update());
+	GetAllUnits().forEach(unitElm => unitElm.Update());
 
 	tooltipElement.classList.toggle("visible", TooltipDisplaying);
 	tooltipElement.style.left = px(mouseClientX);
