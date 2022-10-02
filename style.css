@@ -94,7 +94,7 @@ body {
 	pointer-events: all;
 }
 
-#minimap div {
+#minimap div, #minimap em {
 	position: absolute;
 	width: 4px;
 	height: 4px;
@@ -126,6 +126,17 @@ body {
 	left: 0;
 	border: 1px solid #888;
 	pointer-events: none;
+}
+
+#minimap em {
+	width: 16px;
+	height: 16px;
+	margin-left: -8px;
+	margin-top: -8px;
+	background: transparent;
+	border: 2px solid yellow;
+  animation-duration: 0.6s;
+  animation-name: ping;
 }
 
 #buildBar {
@@ -180,19 +191,19 @@ x-sprite {
 
 x-sprite.explosion {
   animation-duration: 0.3s;
-  animation-name: explode;
+  animation-name: expand;
 }
 
-@keyframes explode {
-  from {
-  	transform: scale(100%);
-  }
-
-  to {
-    transform: scale(10%);
-  }
+@keyframes expand {
+	from {transform: scale(100%); }
+  to {transform: scale(10%); }
 }
 
+@keyframes ping {
+	0% {transform: scale(10%); }
+  33% {transform: scale(200%); }
+  100% {transform: scale(100%); }
+}
 
 x-overlay {
 	display: none;

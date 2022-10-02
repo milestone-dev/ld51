@@ -28,7 +28,7 @@ const UNIT_SIZE_XLARGE = 128;
 const STOPPING_RANGE = TILE/2;
 const MINING_RANGE = UNIT_SIZE_LARGE / 2;
 const PLAYER_NEUTRAL = 0;
-const MINING_SEARCH_RANGE = TILE * 24;
+const MINING_SEARCH_RANGE = TILE * 100;
 const FIGHER_SEARCH_RANGE = TILE * 15;
 const PLAYER_HUMAN = 1;
 const PLAYER_ENEMY = 2;
@@ -36,6 +36,7 @@ const PATROL_RANGE = TILE*8;
 const MINIMAP_SCALE = 64;
 const WORLD_SIZE = 128*64;
 const EXPLOSION_SPRITE_TIMEOUT = 300;
+const MINIMAP_PING_TIMEOUT = 2000;
 const GAME_EVENT_INTERVAL = 10000;
 const GAME_UI_REFRESH_INTERVAL = 500;
 const UNIT_DEFAULT_VISION = TILE*4;
@@ -779,6 +780,14 @@ function CreateUnitsInArea(num, type, playerID, x, y) {
 	return units;
 }
 
+function PingMinimapAtPoint(x,y) {
+	const mElm = document.createElement("em");
+	mElm.style.left = px(x/MINIMAP_SCALE);
+	mElm.style.top = px(y/MINIMAP_SCALE);
+	minimapElement.appendChild(mElm);
+	window.setTimeout(e => mElm.remove(), MINIMAP_PING_TIMEOUT);
+}
+
 function UpdateMinimap() {
 	// minimapElement.innerHTML = "";
 	GetAllUnits().forEach(unitElm => {
@@ -889,10 +898,8 @@ function HandleNewGameEvent(id = null) {
 	}
 
 	if (!Number.isNaN(eventX) && !Number.isNaN(eventY)) {
-		log("ping at", eventX, eventY);
+		PingMinimapAtPoint(eventX, eventY);
 	}
-
-
 
 	eventInfoElement.appendChild(eventElement);
 }
