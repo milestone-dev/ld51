@@ -40,6 +40,7 @@ const MINIMAP_PING_TIMEOUT = 2000;
 const GAME_EVENT_THRESHOLD = 10000;
 const GAME_UI_REFRESH_INTERVAL = 500;
 const UNIT_DEFAULT_VISION = TILE*4;
+const MESSAGE_HIDE_TIMEOUT = 3000;
 const USE_FOW = false;
 const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -129,7 +130,7 @@ var worldElement, uiElement, unitInfoElement, unitPortraitElement, trainButtonsE
 statusBarElement, minimapElement, eventInfoElement, buildingPlacementGhostElement,
 fogContainerElement,fogMaskElement,fogContainerMMElement,fogMaskMMElement, 
 minimapViewPortElement, selectionRectangleElement, mainMenuButtonElement,
-mainMenuResumeButtonElement, mainMenuNewGameButtonElement, splashElement;
+mainMenuResumeButtonElement, mainMenuNewGameButtonElement, splashElement, messageBarElement;
 
 
 var PlayerResources = [0, 0, 0, 0];
@@ -149,6 +150,7 @@ var GameStarted = false;
 var MusicAudio = null;
 var Difficulty = 0;
 var EventTimer = 0;
+var MessageHideInterval = null;
 
 const log = console.log;
 
@@ -416,7 +418,6 @@ class UnitElement extends HTMLElement {
 	}
 
 	stop() {
-		console.log("stopping unit");
 		this.stopTravelling();
 		this.order = Order.Idle;
 		// const r = this.getBoundingClientRect();
@@ -685,6 +686,7 @@ function SetupGame() {
 	fogContainerElement = document.getElementById("fogContainer");
 	fogMaskElement = document.getElementById("fogMask");
 	
+	messageBarElement = document.getElementById("messageBar");
 	splashElement = document.getElementById("splash");
 	mainMenuButtonElement = document.getElementById("mainMenuButton");
 	mainMenuNewGameButtonElement = document.getElementById("mainMenuNewGameButton");
@@ -719,7 +721,6 @@ function SetupGame() {
 function EnterMainMenu() {
 	splashElement.remove();
 	MusicAudio.play();
-	console.log(MusicAudio);
 }
 
 function StartNewGame() {
@@ -840,7 +841,10 @@ function CreateUnit(type, playerID, x, y) {
 }
 
 function DisplayErrorMessage(message) {
-	log(message);
+	if (MessageHideInterval) window.clearTimeout(MessageHideInterval);
+	messageBarElement.innerText = message;
+	MessageHideInterval = window.setTimeout(e => messageBarElement.innerText = "", MESSAGE_HIDE_TIMEOUT);
+	PlayAudio("ui_error");
 }
 
 function PlayAudio(fileName) {
@@ -854,12 +858,12 @@ function PlayMusic() {
 function ConstructBuilding(type, playerID, x, y) {
 	const unitData = GetUnitTypeData(type);
 	if (PlayerResources[playerID] < unitData.cost) {
-		DisplayErrorMessage("Not enough resources");
+		DisplayErrorMessage("Not enough resources. Mine more ore.");
 		return false;
 	}
 	var powered = GetAllPowerGenerators(playerID).some(elm => {return elm.providesPowerAtPoint(x,y)});
 	if (!powered) {
-		DisplayErrorMessage("Need to place in powered area");
+		DisplayErrorMessage("Not powered. Place structures in a powered area.");
 		return false;
 	}
 	PlayerResources[playerID] -= unitData.cost;
@@ -1049,7 +1053,6 @@ function Resume() {
 
 function Tick(ms) {
 	document.body.classList.toggle("paused", Paused);
-	log(EventTimer);
 	mainMenuResumeButtonElement.classList.toggle("visible", GameStarted);
 	if (!Paused) {
 		GetAllUnits().forEach(unitElm => unitElm.Update());
