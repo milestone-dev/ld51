@@ -38,6 +38,9 @@ const WORLD_SIZE = 128*64;
 const EXPLOSION_SPRITE_TIMEOUT = 300;
 const GAME_EVENT_INTERVAL = 10000;
 const GAME_UI_REFRESH_INTERVAL = 500;
+const UNIT_DEFAULT_VISION = TILE*4;
+const USE_FOW = false;
+const SVGNS = "http://www.w3.org/2000/svg";
 
 const RESOURCE_CARRY_AMOUNT_MAX = 50;
 
@@ -51,17 +54,18 @@ const Type = {
 	Fighter: "Fighter",
 }
 const UnitTypeData = {};
-//{type, name, hotkey, icon, size, cost, elevation, buildTime, hp, priority, powerRange, moveSpeed, attackRange, attackDamage, cooldownMax, unitsTrained = []}
+//{type, name, hotkey, icon, size, cost, elevation, buildTime, hp, priority, powerRange, moveSpeed, attackRange, attackDamage, visionRange, cooldownMax, unitsTrained = []}
 function AddUnitTypeData(type, name, hotkey, icon, tooltip, size, data = {}) {
 	UnitTypeData[type] = {type, name, hotkey, icon, tooltip, size};
 	Object.keys(data).forEach(key => UnitTypeData[type][key] = data[key]);
+	if (!data.visionRange) UnitTypeData[type].visionRange = UNIT_DEFAULT_VISION;
 }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
-AddUnitTypeData(Type.Harvester, "Miner pod", "h", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, moveSpeed:2, attackRange:MINING_RANGE, cooldownMax:10});
-AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", "Cost: 50. Primary fighter unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
-AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", "Cost: 400. Primary resource depot and harvester training facility.", UNIT_SIZE_XLARGE, {isBuilding:true, cost:400, elevation:500, buildTime:30, hp:1000, priority:300, powerRange:TILE*10, unitsTrained:[Type.Harvester, Type.Fighter]});
-AddUnitTypeData(Type.PowerExtender, "Power Extender", "p", "📍", "Cost: 100. Extends power range to allow base expansion.", UNIT_SIZE_MEDIUM, {isBuilding: true, cost:100, elevation:500, buildTime:30, hp:200, priority:100, powerRange:TILE*8});
-AddUnitTypeData(Type.StaticDefense, "Tesla Coil Defense", "d", "🗼", "Cost: 200. Primary static defense structure.", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:200, elevation:500, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
+AddUnitTypeData(Type.Harvester, "Miner pod", "h", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, visionRange:TILE*8, moveSpeed:2, attackRange:MINING_RANGE, cooldownMax:10});
+AddUnitTypeData(Type.Fighter, "Interceptor", "f", "🚀", "Cost: 50. Primary fighter unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
+AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", "Cost: 400. Primary resource depot and harvester training facility.", UNIT_SIZE_XLARGE, {isBuilding:true, cost:400, visionRange:TILE*12, elevation:500, buildTime:30, hp:1000, priority:300, powerRange:TILE*10, unitsTrained:[Type.Harvester, Type.Fighter]});
+AddUnitTypeData(Type.PowerExtender, "Power Extender", "p", "📍", "Cost: 100. Extends power range to allow base expansion.", UNIT_SIZE_MEDIUM, {isBuilding: true, cost:100, elevation:500, visionRange:TILE*8, buildTime:30, hp:200, priority:100, powerRange:TILE*8});
+AddUnitTypeData(Type.StaticDefense, "Tesla Coil Defense", "d", "🗼", "Cost: 200. Primary static defense structure.", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:200, elevation:500, visionRange:TILE*15, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", "", UNIT_SIZE_LARGE);
 AddUnitTypeData(Type.Powerup, "Precursor Artefact", "a", "🗿", "", UNIT_SIZE_SMALL);
 
@@ -98,7 +102,9 @@ AddGameEventData(GameEvent.NetworkError, "A long range frequency network outage 
 
 var UNIT_ID = 0;
 var mouseX, mouseY, mouseDown, mousePlaceX, mousePlaceY, mouseClientX, mouseClientY;
-var worldElement, uiElement, unitInfoElement, trainButtonsElement, buildBarElement, statusBarElement, minimapElement, eventInfoElement, buildingPlacementGhostElement;
+var worldElement, uiElement, unitInfoElement, trainButtonsElement, buildBarElement,
+statusBarElement, minimapElement, eventInfoElement, buildingPlacementGhostElement,
+fogContainerElement,fogMaskElement,fogContainerMMElement,fogMaskMMElement, minimapViewPortElement;
 var PlayerResources = [0, 0, 0, 0];
 var eventInterval;
 var HumanPlayerTownHall = null;
@@ -140,6 +146,9 @@ class UnitElement extends HTMLElement {
 		this.destinationX = Number.NaN;
 		this.destinationY = Number.NaN;
 		this.radians = 0;
+		this.visionElement = null;
+		this.visionMMElement = null;
+		this.minimapUnitElement = null;
 
 		// Harvester specific
 		this.resourceCarryAmount = 0;
@@ -174,6 +183,25 @@ class UnitElement extends HTMLElement {
 			overlayElm.style.left = px(-(this.powerRange-this.size/2));
 			this.appendChild(overlayElm);
 		}
+
+		if (USE_FOW) {
+			if (this.playerID == PLAYER_HUMAN) {
+				this.visionElement = document.createElementNS(SVGNS, "circle");
+				this.visionElement.setAttribute("r", this.visionRange);
+				this.visionElement.setAttribute("fill", "black");
+				fogMaskElement.appendChild(this.visionElement);
+
+				this.visionMMElement = document.createElementNS(SVGNS, "circle");
+				this.visionMMElement.setAttribute("r", this.visionRange/MINIMAP_SCALE);
+				this.visionMMElement.setAttribute("fill", "black");
+				fogMaskMMElement.appendChild(this.visionMMElement);
+			}
+			
+		}
+		this.minimapUnitElement = document.createElement("div");
+		this.minimapUnitElement.dataset.player = this.playerID;
+		minimapElement.appendChild(this.minimapUnitElement);
+
 	}
 
 	toString() {
@@ -328,11 +356,11 @@ class UnitElement extends HTMLElement {
 		// this.style.top = px(r.y - r.height/2); // window.scrollY
 	}
 
-
-
 	destroy() {
 		this.hp = 0;
+		if (this.visionElement) this.visionElement.remove();
 		this.remove();
+
 	}
 
 	facePoint(x,y) {
@@ -380,6 +408,7 @@ class UnitElement extends HTMLElement {
 	pickupUnit(unitElm) {
 		if (!unitElm.isPowerup) return;
 		// TODO add bonus for retrieval
+		if (this.visionElement) this.visionElement.remove();
 		unitElm.remove();
 	}
 
@@ -471,8 +500,16 @@ class UnitElement extends HTMLElement {
 			this.resetToIdle();
 		}
 
-
+		// TRANSFORM
 		this.style.transform = this.transform;
+		this.minimapUnitElement.style.left = px(this.centerX/MINIMAP_SCALE);
+		this.minimapUnitElement.style.top = px(this.centerY/MINIMAP_SCALE);
+		if (this.visionElement && this.visionMMElement) {
+			this.visionElement.setAttribute("cx", this.centerX);
+			this.visionElement.setAttribute("cy", this.centerY);
+			this.visionMMElement.setAttribute("cx", this.centerX/MINIMAP_SCALE);
+			this.visionMMElement.setAttribute("cy", this.centerY/MINIMAP_SCALE);
+		}
 
 		if (this.order == Order.HarvestResourceNode) {
 			if (this.resourceCarryAmount < RESOURCE_CARRY_AMOUNT_MAX) {
@@ -552,24 +589,48 @@ function SetupGame() {
 		buildBarElement.appendChild(trainButtonElm);
 	})
 
+	// Minimap
+	minimapElement = document.getElementById("minimap");
+	fogContainerMMElement = document.getElementById("fogContainerMM");
+	fogMaskMMElement = document.getElementById("fogMaskMM");
+	minimapViewPortElement = document.createElement("span");
+	minimapElement.appendChild(minimapViewPortElement);
+	fogContainerMMElement.width = WORLD_SIZE/MINIMAP_SCALE;
+	fogContainerMMElement.height = WORLD_SIZE/MINIMAP_SCALE;
+	fogContainerMMElement.setAttribute("viewBox", `0 0 ${WORLD_SIZE/MINIMAP_SCALE} ${WORLD_SIZE/MINIMAP_SCALE}`);
+
 	unitInfoElement = document.getElementById("unitInfo");
 	tooltipElement = document.getElementById("tooltip");
 	trainButtonsElement = document.getElementById("trainButtons");
 	statusBarElement = document.getElementById("statusBar");
-	minimapElement = document.getElementById("minimap");
 	worldElement = document.getElementById("world");
 	uiElement = document.getElementById("ui");
 	eventInfoElement = document.getElementById("eventInfo");
+	fogContainerElement = document.getElementById("fogContainer");
+	fogMaskElement = document.getElementById("fogMask");
+	
+	
 	buildingPlacementGhostElement = document.getElementById("buildingPlacementGhost");
 	customElements.define(UNIT_SELECTOR, UnitElement);
 	customElements.define(SPRITE_SELECTOR, SpriteElement);
 	customElements.define(OVERLAY_SELECTOR, OverlayElement);
 	worldElement.style.width = px(WORLD_SIZE);
 	worldElement.style.height = px(WORLD_SIZE);
+	fogContainerElement.width = WORLD_SIZE;
+	fogContainerElement.height = WORLD_SIZE;
+	fogContainerElement.setAttribute("viewBox", `0 0 ${WORLD_SIZE} ${WORLD_SIZE}`);
+
+	if (!USE_FOW) {
+		fogContainerElement.remove();
+		fogContainerMMElement.remove();
+	}
+
 	PlayerResources[PLAYER_HUMAN] = 100;
 	window.setInterval(UpdateMinimap, 100);
 	UpdateMinimap();
+	UpdateUI();
 	eventInterval = window.setInterval(CreateNewGameEvent, GAME_EVENT_INTERVAL);
+	window.setInterval(UpdateUI, GAME_UI_REFRESH_INTERVAL);
 	window.setInterval(e => UpdateUnitInfo(true), GAME_UI_REFRESH_INTERVAL);
 
 
@@ -694,23 +755,20 @@ function CreateUnitsInArea(num, type, playerID, x, y) {
 }
 
 function UpdateMinimap() {
-	minimapElement.innerHTML = "";
+	// minimapElement.innerHTML = "";
 	GetAllUnits().forEach(unitElm => {
-		const mElm = document.createElement("div");
+		// const mElm = document.createElement("div");
 
-		mElm.style.left = px(unitElm.centerX/MINIMAP_SCALE);
-		mElm.style.top = px(unitElm.centerY/MINIMAP_SCALE);
-		mElm.className = unitElm.className;
-		mElm.dataset.player = unitElm.dataset.player;
-		minimapElement.appendChild(mElm);
+		// mElm.style.left = px(unitElm.centerX/MINIMAP_SCALE);
+		// mElm.style.top = px(unitElm.centerY/MINIMAP_SCALE);
+		// mElm.dataset.player = unitElm.dataset.player;
+		// minimapElement.appendChild(mElm);
 	});
 
-	const viewportElm = document.createElement("span");
-	viewportElm.style.left = px(window.scrollX/MINIMAP_SCALE);
-	viewportElm.style.top = px(window.scrollY/MINIMAP_SCALE);
-	viewportElm.style.width = px(window.innerWidth/MINIMAP_SCALE);
-	viewportElm.style.height = px(window.innerHeight/MINIMAP_SCALE);
-	minimapElement.appendChild(viewportElm);
+	minimapViewPortElement.style.left = px(window.scrollX/MINIMAP_SCALE);
+	minimapViewPortElement.style.top = px(window.scrollY/MINIMAP_SCALE);
+	minimapViewPortElement.style.width = px(window.innerWidth/MINIMAP_SCALE);
+	minimapViewPortElement.style.height = px(window.innerHeight/MINIMAP_SCALE);
 }
 
 function UpdateUnitInfo(force=false) {
@@ -789,12 +847,18 @@ function CreateNewGameEvent(id = null) {
 	eventInfoElement.appendChild(eventElement);
 }
 
+function UpdateUI() {
+	statusBarElement.innerText = `💎 ${PlayerResources[PLAYER_HUMAN]}`;
+}
+
 function Tick(ms) {
 	GetAllUnits().forEach(unitElm => unitElm.Update());
 
 	tooltipElement.classList.toggle("visible", TooltipDisplaying);
-	tooltipElement.style.left = px(mouseClientX);
-	tooltipElement.style.top = px(mouseClientY);
+	if (TooltipDisplaying) {
+		tooltipElement.style.left = px(mouseClientX);
+		tooltipElement.style.top = px(mouseClientY);
+	}
 
 	document.body.classList.toggle("showPowerRange", CurrentBuildingPlaceType);
 	buildingPlacementGhostElement.classList.toggle("visible", CurrentBuildingPlaceType);
@@ -805,7 +869,6 @@ function Tick(ms) {
 		buildingPlacementGhostElement.style.top = px(mousePlaceY);
 	}
 
-	statusBarElement.innerText = `💎 ${PlayerResources[PLAYER_HUMAN]}`;
 	UpdateUnitInfo();
 
 	var scrollX = 0;
@@ -814,7 +877,7 @@ function Tick(ms) {
 	if (mouseClientX <= TILE * 2) scrollX -= TILE/2;
 	if (mouseClientY >= window.innerHeight - TILE * 2) scrollY += TILE/2;
 	if (mouseClientY <= TILE * 2) scrollY -= TILE/2;
-	if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX, scrollY);
+	// if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX, scrollY);
 
 	window.requestAnimationFrame(Tick);
 }
@@ -872,7 +935,6 @@ document.addEventListener("DOMContentLoaded", evt => {
 		mousePlaceY = Math.floor(mouseY/TILE)*TILE;
 		mouseClientX = evt.clientX;
 		mouseClientY = evt.clientY;
-
 		if (mouseDown && evt.target == minimapElement) {
 			window.scrollTo(evt.offsetX * MINIMAP_SCALE - window.innerWidth/2, evt.offsetY * MINIMAP_SCALE - window.innerHeight/2);
 			UpdateMinimap();

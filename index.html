@@ -8,19 +8,32 @@
 	<link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
-<div id="world">
-	<div id="buildingPlacementGhost"></div>
-</div>
-<div id="ui">
-	<div id="tooltip">Tooltip text</div>
-	<button id="mainMenuButton">MAIN MENU</button>
-	<div id="statusBar"></div>
-	<div id="minimap"><span/></div>
-	<div id="buildBar">
+	<div id="world">
+		<div id="buildingPlacementGhost"></div>
+			<svg id="fogContainer">
+				<mask id="fogMask">
+					<rect x="0" y="0" width="100%" height="100%" fill="white" />
+				</mask>
+				<rect x="0" y="0" width="100%" height="100%" fill="black" fill-opacity="1" mask="url(#fogMask)" />
+			</svg>
 	</div>
-	<div id="unitInfo"></div>
-	<div id="trainButtons"></div>
-	<div id="eventInfo"></div>
-</div>
+	<div id="ui">
+		<div id="tooltip">Tooltip text</div>
+		<button id="mainMenuButton">MAIN MENU</button>
+		<div id="statusBar"></div>
+		<div id="minimap">
+			<svg id="fogContainerMM">
+				<mask id="fogMaskMM">
+					<rect x="0" y="0" width="100%" height="100%" fill="white" />
+				</mask>
+				<rect x="0" y="0" width="100%" height="100%" fill="black" fill-opacity="1" mask="url(#fogMaskMM)" />
+			</svg>
+		</div>
+		<div id="buildBar">
+		</div>
+		<div id="unitInfo"></div>
+		<div id="trainButtons"></div>
+		<div id="eventInfo"></div>
+	</div>
 </body>
 </html>
