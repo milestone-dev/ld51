@@ -188,6 +188,7 @@ class UnitElement extends HTMLElement {
 		this.visionElement = null;
 		this.visionMMElement = null;
 		this.minimapUnitElement = null;
+		this.imageElement = null;
 
 		// Harvester specific
 		this.resourceCarryAmount = 0;
@@ -207,7 +208,7 @@ class UnitElement extends HTMLElement {
 		this.style.lineHeight = px(data.size);
 		this.style.fontSize = px(data.size);
 		this.style.zIndex = data.elevation;
-		this.innerText = data.icon;
+		// this.innerText = data.icon;
 		this.moveSpeed = data.moveSpeed;
 		this.order = Order.Idle;
 		this.dataset.type = this.type;
@@ -237,6 +238,11 @@ class UnitElement extends HTMLElement {
 			}
 			
 		}
+
+		this.imageElement = document.createElement("img");
+		this.imageElement.src = `img/sprite_${this.type}.png`;
+		this.appendChild(this.imageElement);
+
 		this.minimapUnitElement = document.createElement("div");
 		this.minimapUnitElement.dataset.player = this.playerID;
 		minimapElement.appendChild(this.minimapUnitElement);
@@ -491,7 +497,11 @@ class UnitElement extends HTMLElement {
 	}
 
 	get transform() {
-		return `translate3d(${px(this.centerX-this.size/2)}, ${px(this.centerY-this.size/2)}, 0) rotate(${this.radians}rad)`;
+		return `translate3d(${px(this.centerX-this.size/2)}, ${px(this.centerY-this.size/2)}, 0)`;
+	}
+
+	get imageTransform() {
+		return `rotate(${this.radians}rad)`;
 	}
 
 	Update() {
@@ -580,6 +590,7 @@ class UnitElement extends HTMLElement {
 
 		// TRANSFORM
 		this.style.transform = this.transform;
+		this.imageElement.style.transform = this.imageTransform;
 		this.minimapUnitElement.style.left = px(this.centerX/MINIMAP_SCALE);
 		this.minimapUnitElement.style.top = px(this.centerY/MINIMAP_SCALE);
 		if (this.visionElement && this.visionMMElement) {
