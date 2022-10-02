@@ -260,7 +260,6 @@ class UnitElement extends HTMLElement {
 	deselect() {this.classList.remove("selected"); }
 
 	travelToPoint(orderX, orderY) {
-		// console.log(orderX, orderY);
 		if (this.moveSpeed == 0) return;
 
 		this.destinationX = orderX;
@@ -923,7 +922,6 @@ function UpdateUI() {
 }
 
 function SelectUnitsInRectangle(x, y, w, h, add=false) {
-	log(x,y,w,y,add);
 	if (!add) DeselectAllUnits();
 	GetAllPlayerUnits(PLAYER_HUMAN)
 	.filter(unitElm => (!unitElm.isSingleSelect && unitElm.centerX >= x && unitElm.centerX <= x+w && unitElm.centerY >= y && unitElm.centerY <= y+h))
@@ -999,7 +997,6 @@ document.addEventListener("DOMContentLoaded", evt => {
 			evt.target.select();
 		} else if (evt.target == minimapElement) {
 			window.scrollTo(evt.offsetX * MINIMAP_SCALE - window.innerWidth/2, evt.offsetY * MINIMAP_SCALE - window.innerHeight/2);
-			// log(evt);
 			UpdateMinimap();
 		}
 	});
@@ -1012,7 +1009,6 @@ document.addEventListener("DOMContentLoaded", evt => {
 			SelectionRectangleLeft = evt.pageX;
 			SelectionRectangleHeight = 0;
 			SelectionRectangleWidth = 0;
-			// console.log("PLACE", SelectionRectangleTop, SelectionRectangleLeft);
 		}
 	});
 	document.addEventListener("mouseup", evt => {
@@ -1041,13 +1037,6 @@ document.addEventListener("DOMContentLoaded", evt => {
 		if (SelectionRectangleDisplaying) {
 			SelectionRectangleWidth = evt.pageX - SelectionRectangleLeft;
 			SelectionRectangleHeight = evt.pageY - SelectionRectangleTop;
-			console.log(
-				"top", SelectionRectangleTop,
-				"left", SelectionRectangleLeft,
-				"width", SelectionRectangleWidth,
-				"height", SelectionRectangleWidth
-			);
-
 		}
 		mousePlaceX = Math.floor(mouseX/TILE)*TILE;
 		mousePlaceY = Math.floor(mouseY/TILE)*TILE;
