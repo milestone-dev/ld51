@@ -37,7 +37,7 @@ const MINIMAP_SCALE = 64;
 const WORLD_SIZE = 128*64;
 const EXPLOSION_SPRITE_TIMEOUT = 300;
 const MINIMAP_PING_TIMEOUT = 2000;
-const GAME_EVENT_INTERVAL = 10000;
+const GAME_EVENT_THRESHOLD = 10000;
 const GAME_UI_REFRESH_INTERVAL = 500;
 const UNIT_DEFAULT_VISION = TILE*4;
 const USE_FOW = false;
@@ -148,6 +148,7 @@ var Paused = true;
 var GameStarted = false;
 var MusicAudio = null;
 var Difficulty = 0;
+var EventTimer = 0;
 
 const log = console.log;
 
@@ -304,6 +305,19 @@ class UnitElement extends HTMLElement {
 		if (this.playerID == PLAYER_HUMAN) PlayAudio(`response_${this.type}_ready`);
 	}
 
+	playAttackAudio() {
+		// TODO: Check nearby
+		switch (this.type) {
+			case Type.AlienAffliction:
+			case Type.AlienGorger:
+				PlayAudio(`attack_Venom`)
+				break;
+			default:
+				PlayAudio(`attack_Laser`);
+				break;
+		}
+	}
+
 	deselect() {this.classList.remove("selected"); }
 
 	travelToPoint(orderX, orderY) {
@@ -416,6 +430,7 @@ class UnitElement extends HTMLElement {
 	destroy() {
 		this.hp = 0;
 		if (this.visionElement) this.visionElement.remove();
+		if (this.minimapUnitElement) this.minimapUnitElement.remove();
 		this.remove();
 
 	}
@@ -595,6 +610,7 @@ class UnitElement extends HTMLElement {
 		if (this.order == Order.AttackUnit) {
 			if (this.targetUnit && this.targetUnit.isActive) {
 				if (this.cooldown <= 0) {
+					this.playAttackAudio();
 					this.targetUnit.createSpriteEffect("💥");
 					this.targetUnit.hp -= this.attackDamage;
 					this.cooldown = this.cooldownMax;
@@ -696,6 +712,7 @@ function SetupGame() {
 	window.setInterval(UpdateUI, GAME_UI_REFRESH_INTERVAL);
 	window.setInterval(e => UpdateUnitInfo(true), GAME_UI_REFRESH_INTERVAL);
 	window.setInterval(UpdateMinimap, 100);
+	window.setInterval(e => {if (!Paused) EventTimer += 100}, 100);
 	window.requestAnimationFrame(Tick);
 }
 
@@ -708,6 +725,7 @@ function EnterMainMenu() {
 function StartNewGame() {
 	GameStarted = true;
 	Difficulty = 0;
+	EventTimer = 0;
 	GetAllUnits().forEach(unitElm => unitElm.remove());
 	window.setTimeout(e => window.scrollTo(WORLD_SIZE/2 - window.innerWidth/2, WORLD_SIZE/2 - window.innerHeight/2), 100);
 
@@ -740,11 +758,7 @@ function StartNewGame() {
 	Resume();
 	UpdateMinimap();
 	UpdateUI();
-
-	
-	eventInterval = window.setInterval(HandleNewGameEvent, GAME_EVENT_INTERVAL);
 	PlayerResources[PLAYER_HUMAN] = 100;
-	
 }
 
 function Log(...args) {
@@ -950,8 +964,7 @@ function CalculateSpawnAmount(amount) {
 	return amount;
 }
 
-function HandleNewGameEvent(id = null) {
-
+function TriggerNewGameEvent(id = null) {
 	const eventKeys = Object.keys(GameEvent);
 	// TODO randomize with weights
 	if (!id) id = eventKeys[parseInt(Math.random() * eventKeys.length - 1)];
@@ -1036,6 +1049,7 @@ function Resume() {
 
 function Tick(ms) {
 	document.body.classList.toggle("paused", Paused);
+	log(EventTimer);
 	mainMenuResumeButtonElement.classList.toggle("visible", GameStarted);
 	if (!Paused) {
 		GetAllUnits().forEach(unitElm => unitElm.Update());
@@ -1072,6 +1086,11 @@ function Tick(ms) {
 		if (mouseClientY >= window.innerHeight - TILE) scrollY += TILE/2;
 		if (mouseClientY <= 0) scrollY -= TILE/2;
 		if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX, scrollY);
+
+		while(EventTimer >= GAME_EVENT_THRESHOLD) {
+			EventTimer -= GAME_EVENT_THRESHOLD;
+			TriggerNewGameEvent();
+		}
 	};
 
 	window.requestAnimationFrame(Tick);
@@ -1171,7 +1190,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 				if (data.isBuilding) {
 					CurrentBuildingPlaceType = type;
 				} else {
-					if (false && evt.shiftKey) {
+					if (evt.shiftKey) {
 						CreateUnit(type, evt.ctrlKey ? PLAYER_ENEMY : PLAYER_HUMAN, mouseX, mouseY)
 					} else {
 						const selectedUnit = GetSelectedUnit();
