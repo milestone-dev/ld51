@@ -287,6 +287,7 @@ class UnitElement extends HTMLElement {
 
 	select() {
 		this.classList.add("selected");
+		if (this.minimapUnitElement) this.minimapUnitElement.classList.add("selected");
 	}
 
 	playWhatAudio() {
@@ -320,7 +321,10 @@ class UnitElement extends HTMLElement {
 		}
 	}
 
-	deselect() {this.classList.remove("selected"); }
+	deselect() {
+		this.classList.remove("selected");
+		if (this.minimapUnitElement) this.minimapUnitElement.classList.remove("selected");
+	}
 
 	travelToPoint(orderX, orderY) {
 		if (this.moveSpeed == 0) return;
@@ -796,7 +800,7 @@ function GetSelectedUnit() {
 }
 
 function DeselectAllUnits() {
-	return worldElement.querySelectorAll(".selected").forEach(unitElm => unitElm.classList.remove("selected"));
+	return worldElement.querySelectorAll(".selected").forEach(unitElm => unitElm.deselect());
 }
 
 function GetAllPlayerUnits(playerID) {
@@ -1126,7 +1130,6 @@ document.addEventListener("DOMContentLoaded", evt => {
 			return;
 		}
 
-
 		if (UnitElement.isElementUnit(evt.target)) {
 			if (!evt.shiftKey) DeselectAllUnits();
 			evt.target.select();
@@ -1138,7 +1141,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 	});
 
 	document.addEventListener("mousedown", evt => {
-		mouseDown = true;
+		mouseDown = evt.button == 0;
 		if (evt.button == 0 && (evt.target == worldElement || evt.target.tagName.toLowerCase() == UNIT_SELECTOR)) {
 			SelectionRectangleDisplaying = true;
 			SelectionRectangleTop = evt.pageY;
@@ -1148,6 +1151,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 		}
 	});
 	document.addEventListener("mouseup", evt => {
+		console.log("mouseup");
 		mouseDown = false;
 		if (SelectionRectangleDisplaying) {
 			SelectUnitsInRectangle(SelectionRectangleLeft, SelectionRectangleTop, SelectionRectangleWidth, SelectionRectangleHeight, evt.shiftKey);
@@ -1212,11 +1216,16 @@ document.addEventListener("DOMContentLoaded", evt => {
 		const selectedUnits = GetSelectedUnits();
 		selectedUnits.forEach(unitElm => {
 			if (unitElm.playerID == PLAYER_HUMAN && unitElm.isMobile) {
-				if (!evt.target || !UnitElement.isElementUnit(evt.target)) {
-					if (evt.ctrlKey && unitElm.isAttackingUnit) unitElm.orderAttackMoveToPoint(evt.pageX, evt.pageY);
- 					else unitElm.orderMoveToPoint(evt.pageX, evt.pageY);
+				if (evt.target == minimapElement) {
+					if (evt.ctrlKey && unitElm.isAttackingUnit) unitElm.orderAttackMoveToPoint(evt.offsetX * MINIMAP_SCALE, evt.offsetX * MINIMAP_SCALE);
+ 					else unitElm.orderMoveToPoint(evt.offsetX * MINIMAP_SCALE, evt.offsetX * MINIMAP_SCALE);
+				} else {
+					if (!evt.target || !UnitElement.isElementUnit(evt.target)) {
+						if (evt.ctrlKey && unitElm.isAttackingUnit) unitElm.orderAttackMoveToPoint(evt.pageX, evt.pageY);
+	 					else unitElm.orderMoveToPoint(evt.pageX, evt.pageY);
+					}
+					else unitElm.orderInteractWithUnit(evt.target);
 				}
-				else unitElm.orderInteractWithUnit(evt.target);
 			}
 		})
 		if (selectedUnits.length > 0 && selectedUnits[0].playerID == PLAYER_HUMAN && selectedUnits[0].isMobile) selectedUnits[0].playAckAudio();
