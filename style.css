@@ -158,6 +158,11 @@ button {
 	marginx: 16px 0;
 }
 
+#unitPortrait {
+	width: 100%;
+	image-rendering: pixelated;
+}
+
 #eventInfo {
 	position: fixed;
 	width: 128px;
@@ -271,9 +276,11 @@ x-unit.selected x-overlay {
 	position: fixed;
 	background: #666;
 	width: 300px;
-	top: 150px;
+	min-height: 300px;
+	top: 50%;
 	left: 50%;
 	margin-left: -150px;
+	margin-top: -150px;
 	z-index: 9999999;	
 	box-sizing: border-box;
 	padding: 32px;
@@ -305,7 +312,12 @@ x-unit.selected x-overlay {
 	padding: 16px 0;
 }
 
-
+#splash {
+	background: #222 url("img/splash.png") no-repeat center center;
+	position: fixed;
+	inset: 0 0 0 0;
+	z-index: 999999999;
+}
 
 #mainMenuResumeButton {display: none;}
 #mainMenuResumeButton.visible { display: block; }

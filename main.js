@@ -53,6 +53,12 @@ const Type = {
 	PowerExtender: "PowerExtender",
 	Harvester: "Harvester",
 	Fighter: "Fighter",
+	Artefact: "Artefact",
+	DerelictShip: "DerelictShip",
+	AlienAffliction: "AlienAffliction",
+	AlienGorger: "AlienGorger",
+	PirateRaider: "PirateRaider",
+	PirateMarauder: "PirateMarauder",
 }
 
 var EnemyPlayers = 0;
@@ -62,6 +68,8 @@ function AddUnitTypeData(type, name, hotkey, icon, tooltip, size, data = {}) {
 	UnitTypeData[type] = {type, name, hotkey, icon, tooltip, size};
 	Object.keys(data).forEach(key => UnitTypeData[type][key] = data[key]);
 	if (!data.visionRange) UnitTypeData[type].visionRange = UNIT_DEFAULT_VISION;
+	if (!data.ackResponses) UnitTypeData[type].ackResponses = 0;
+	if (!data.whatResponses) UnitTypeData[type].visionRange = 0;
 }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
 AddUnitTypeData(Type.Harvester, "Miner pod", "h", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, visionRange:TILE*8, moveSpeed:2, attackRange:MINING_RANGE, cooldownMax:10});
@@ -72,6 +80,13 @@ AddUnitTypeData(Type.StaticDefense, "Tesla Coil Defense", "d", "🗼", "Cost: 20
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", "", UNIT_SIZE_LARGE);
 AddUnitTypeData(Type.Artefact, "Precursor Artefact", "a", "🗿", "", UNIT_SIZE_SMALL);
 AddUnitTypeData(Type.DerelictShip, "Derelict Ship", "", "✈️", "", UNIT_SIZE_LARGE);
+
+AddUnitTypeData(Type.AlienAffliction, "Affliction", null, "🦇", "", UNIT_SIZE_SMALL, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
+AddUnitTypeData(Type.AlienGorger, "Gorger", null, "🐉", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
+AddUnitTypeData(Type.PirateRaider, "Raider", null, "🛸", "", UNIT_SIZE_MEDIUM, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
+AddUnitTypeData(Type.PirateMarauder, "Marauder", null, "🛩", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
+
+
 
 const GameEvent = {
 	NewResource: "NewResource",
@@ -108,10 +123,11 @@ AddGameEventData(GameEvent.RivalMiners, "A rival mining team has entered the sec
 
 var UNIT_ID = 0;
 var mouseX, mouseY, mouseDown, mousePlaceX, mousePlaceY, mouseClientX, mouseClientY;
-var worldElement, uiElement, unitInfoElement, trainButtonsElement, buildBarElement,
+var worldElement, uiElement, unitInfoElement, unitPortraitElement, trainButtonsElement, buildBarElement,
 statusBarElement, minimapElement, eventInfoElement, buildingPlacementGhostElement,
 fogContainerElement,fogMaskElement,fogContainerMMElement,fogMaskMMElement, 
-minimapViewPortElement, selectionRectangleElement, mainMenuButtonElement, mainMenuResumeButtonElement, mainMenuNewGameButtonElement;
+minimapViewPortElement, selectionRectangleElement, mainMenuButtonElement,
+mainMenuResumeButtonElement, mainMenuNewGameButtonElement, splashElement;
 
 
 var PlayerResources = [0, 0, 0, 0];
@@ -128,6 +144,8 @@ var SelectionRectangleWidth = 0;
 var SelectionRectangleHeight = 0;
 var Paused = true;
 var GameStarted = false;
+var MusicAudio = null;
+var Difficulty = 0;
 
 const log = console.log;
 
@@ -248,6 +266,7 @@ class UnitElement extends HTMLElement {
 	get providesPower() {return this.powerRange > 0; }
 	get requiresPower() {return this.isBuilding; }
 	get isSingleSelect() {return this.isBuilding;}
+	get portraitImage() {return `img/portrait_${this.type}.png`;}
 
 	providesPowerAtPoint(x, y) {
 		if (!this.providesPower) return false;
@@ -261,7 +280,27 @@ class UnitElement extends HTMLElement {
 	distanceToPoint(x, y) { return Math.sqrt(Math.pow((this.centerX - x), 2) + Math.pow((this.centerY - y), 2)); }
 	distanceToUnit(unitElm) { return this.distanceToPoint(unitElm.centerX, unitElm.centerY); }
 
-	select() {this.classList.add("selected"); }
+	select() {
+		this.classList.add("selected");
+	}
+
+	playWhatAudio() {
+		if (this.playerID == PLAYER_HUMAN) {
+			if (this.whatResponses > 0) PlayAudio(`response_${this.type}_what0${Math.round(Math.random()*this.whatResponses)}`);
+			else PlayAudio(`response_Default_what00`);
+		}
+	}
+
+	playAckAudio() {
+		if (this.playerID == PLAYER_HUMAN) {
+			if (this.ackResponses > 0) PlayAudio(`response_${this.type}_ack0${Math.round(Math.random()*this.ackResponses)}`);
+			else PlayAudio(`response_Default_ack00`);
+		}
+	}
+
+	playReadyAudio() {
+		if (this.playerID == PLAYER_HUMAN) PlayAudio(`response_${this.type}_ready`);
+	}
 
 	deselect() {this.classList.remove("selected"); }
 
@@ -407,7 +446,8 @@ class UnitElement extends HTMLElement {
 		const data = GetUnitTypeData(unitType);
 		if (PlayerResources[this.playerID] >= data.cost) {
 			PlayerResources[this.playerID] -= data.cost
-			CreateUnit(unitType, this.playerID, this.centerX, this.centerY);
+			const unit = CreateUnit(unitType, this.playerID, this.centerX, this.centerY);
+			unit.playReadyAudio();
 		} else {
 			DisplayErrorMessage("Not enough resources");
 		}
@@ -616,6 +656,7 @@ function SetupGame() {
 	fogContainerMMElement.setAttribute("viewBox", `0 0 ${WORLD_SIZE/MINIMAP_SCALE} ${WORLD_SIZE/MINIMAP_SCALE}`);
 
 	unitInfoElement = document.getElementById("unitInfo");
+	unitPortraitElement = document.getElementById("unitPortrait");
 	tooltipElement = document.getElementById("tooltip");
 	selectionRectangleElement = document.getElementById("selectionRectangle");
 	trainButtonsElement = document.getElementById("trainButtons");
@@ -626,6 +667,7 @@ function SetupGame() {
 	fogContainerElement = document.getElementById("fogContainer");
 	fogMaskElement = document.getElementById("fogMask");
 	
+	splashElement = document.getElementById("splash");
 	mainMenuButtonElement = document.getElementById("mainMenuButton");
 	mainMenuNewGameButtonElement = document.getElementById("mainMenuNewGameButton");
 	mainMenuResumeButtonElement = document.getElementById("mainMenuResumeButton");
@@ -645,6 +687,9 @@ function SetupGame() {
 		fogContainerMMElement.remove();
 	}
 
+	MusicAudio = new Audio(`./audio/music_01.mp3`);
+	MusicAudio.loop = true;
+
 	// Core loops
 	window.setInterval(UpdateUI, GAME_UI_REFRESH_INTERVAL);
 	window.setInterval(e => UpdateUnitInfo(true), GAME_UI_REFRESH_INTERVAL);
@@ -652,9 +697,15 @@ function SetupGame() {
 	window.requestAnimationFrame(Tick);
 }
 
+function EnterMainMenu() {
+	splashElement.remove();
+	MusicAudio.play();
+	console.log(MusicAudio);
+}
+
 function StartNewGame() {
-	
 	GameStarted = true;
+	Difficulty = 0;
 	GetAllUnits().forEach(unitElm => unitElm.remove());
 	window.setTimeout(e => window.scrollTo(WORLD_SIZE/2 - window.innerWidth/2, WORLD_SIZE/2 - window.innerHeight/2), 100);
 
@@ -776,6 +827,14 @@ function DisplayErrorMessage(message) {
 	log(message);
 }
 
+function PlayAudio(fileName) {
+	new Audio(`audio/${fileName}.mp3`).play();
+}
+
+function PlayMusic() {
+	new Audio(`audio/${fileName}.mp3`).play();
+}
+
 function ConstructBuilding(type, playerID, x, y) {
 	const unitData = GetUnitTypeData(type);
 	if (PlayerResources[playerID] < unitData.cost) {
@@ -858,6 +917,7 @@ function UpdateUnitInfo(force=false) {
 	}
 
 	if (refreshInfo) {
+		unitPortrait.src = selectedUnit.portraitImage;
 		unitInfoElement.innerHTML = "";
 		if (CurrentDisplayUnit.isHarvester) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, CurrentDisplayUnit.order, `${CurrentDisplayUnit.targetX}, ${CurrentDisplayUnit.targetY}`, CurrentDisplayUnit.targetUnit, CurrentDisplayUnit.previousResourceNode, CurrentDisplayUnit.resourceCarryAmount, `${CurrentDisplayUnit.cooldown}/${CurrentDisplayUnit.cooldownMax}`);
 		else if (CurrentDisplayUnit.isAttackingUnit) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, CurrentDisplayUnit.order, `${CurrentDisplayUnit.targetX}, ${CurrentDisplayUnit.targetY}`, CurrentDisplayUnit.targetUnit, `${CurrentDisplayUnit.cooldown}/${CurrentDisplayUnit.cooldownMax}`);
@@ -881,6 +941,13 @@ function UpdateUnitInfo(force=false) {
 	}
 }
 
+function CalculateSpawnAmount(amount) {
+	if (Math.random() < Difficulty/10) {
+		amount += Math.floor(Math.random()*Difficulty);
+	}
+	return amount;
+}
+
 function HandleNewGameEvent(id = null) {
 
 	const eventKeys = Object.keys(GameEvent);
@@ -899,42 +966,44 @@ function HandleNewGameEvent(id = null) {
 		case GameEvent.PirateInvasion:
 			eventX = GetRandomWorldPointAtEdge();
 			eventY = GetRandomWorldPointAtEdge();
-			units = CreateUnitsInArea(2, Type.Fighter, PLAYER_ENEMY, eventX, eventY);
-			units.forEach(unitElm => unitElm.orderAttackMoveToPoint(HumanPlayerTownHall.centerX, HumanPlayerTownHall.centerY))
+			CreateUnitsInArea(CalculateSpawnAmount(2), Type.PirateRaider, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderAttackMoveToPoint(HumanPlayerTownHall.centerX, HumanPlayerTownHall.centerY))
+			if (Difficulty > 10) CreateUnitsInArea(CalculateSpawnAmount(1), Type.PirateMarauder, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderAttackMoveToPoint(HumanPlayerTownHall.centerX, HumanPlayerTownHall.centerY))
 		break;
 		case GameEvent.AlienInvasion:
 			eventX = GetRandomWorldPoint();
 			eventY = GetRandomWorldPoint();
-			units = CreateUnitsInArea(3, Type.Fighter, PLAYER_ENEMY, eventX, eventY);
-			units.forEach(unitElm => unitElm.orderToPatrolInArea())
+			CreateUnitsInArea(CalculateSpawnAmount(3), Type.AlienAffliction, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderToPatrolInArea())
+			CreateUnitsInArea(CalculateSpawnAmount(1), Type.AlienGorger, PLAYER_ENEMY, eventX, eventY).forEach(unitElm => unitElm.orderToPatrolInArea())
 		break;
 		case GameEvent.RivalMiners:
 			eventX = GetRandomWorldPointNearEdge();
 			eventY = GetRandomWorldPointNearEdge();
 			CreateUnit(Type.ResourceDepot, PLAYER_ENEMY, eventX, eventY);
-			units = CreateUnitsInArea(3, Type.Harvester, PLAYER_ENEMY, eventX, eventY);
+			units = CreateUnitsInArea(CalculateSpawnAmount(3), Type.Harvester, PLAYER_ENEMY, eventX, eventY);
 			units.forEach(unitElm => unitElm.harvestNearbyResources())
 		break;
 		case GameEvent.Reinforcements:
 			eventX = HumanPlayerTownHall.centerX;
 			eventY = HumanPlayerTownHall.centerX;
-			CreateUnitsInArea(1, Type.Fighter, PLAYER_HUMAN, eventX, eventY);
+			CreateUnit(Type.Fighter, PLAYER_HUMAN, eventX, eventY);
 		break;
 		case GameEvent.ArtefactDiscovery:
 			eventX = GetRandomWorldPoint();
 			eventY = GetRandomWorldPoint();
-			CreateUnitsInArea(1, Type.Artefact, PLAYER_NEUTRAL, eventX, eventY);
+			CreateUnit(Type.Artefact, PLAYER_NEUTRAL, eventX, eventY);
 		break;
 		case GameEvent.DerelictShip:
 			eventX = GetRandomWorldPoint();
 			eventY = GetRandomWorldPoint();
-			CreateUnitsInArea(1, Type.DerelictShip, PLAYER_NEUTRAL, eventX, eventY);
+			CreateUnit(Type.DerelictShip, PLAYER_NEUTRAL, eventX, eventY);
 		break;
 	}
 
 	if (!Number.isNaN(eventX) && !Number.isNaN(eventY)) {
 		PingMinimapAtPoint(eventX, eventY);
 	}
+
+	Difficulty++;
 
 	eventInfoElement.appendChild(eventElement);
 }
@@ -946,17 +1015,21 @@ function UpdateUI() {
 
 function SelectUnitsInRectangle(x, y, w, h, add=false) {
 	if (!add) DeselectAllUnits();
-	GetAllPlayerUnits(PLAYER_HUMAN)
-	.filter(unitElm => (!unitElm.isSingleSelect && unitElm.centerX >= x && unitElm.centerX <= x+w && unitElm.centerY >= y && unitElm.centerY <= y+h))
-	.forEach(unitElm => unitElm.select());
+	const units = GetAllPlayerUnits(PLAYER_HUMAN)
+	.filter(unitElm => (!unitElm.isSingleSelect && unitElm.centerX >= x && unitElm.centerX <= x+w && unitElm.centerY >= y && unitElm.centerY <= y+h));
+	units.forEach(unitElm => unitElm.select());
+	if (units.length > 0) units[0].playWhatAudio();
+
 }
 
 function Pause() {
 	Paused = true;
+	MusicAudio.pause();
 }
 
 function Resume() {
 	Paused = false;
+	MusicAudio.play();
 }
 
 function Tick(ms) {
@@ -992,11 +1065,11 @@ function Tick(ms) {
 
 		var scrollX = 0;
 		var scrollY = 0;
-		if (mouseClientX >= window.innerWidth - TILE * 2) scrollX += TILE/2;
-		if (mouseClientX <= TILE * 2) scrollX -= TILE/2;
-		if (mouseClientY >= window.innerHeight - TILE * 2) scrollY += TILE/2;
-		if (mouseClientY <= TILE * 2) scrollY -= TILE/2;
-		// if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX, scrollY);
+		if (mouseClientX >= window.innerWidth - TILE) scrollX += TILE/2;
+		if (mouseClientX <= 0) scrollX -= TILE/2;
+		if (mouseClientY >= window.innerHeight - TILE) scrollY += TILE/2;
+		if (mouseClientY <= 0) scrollY -= TILE/2;
+		if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX, scrollY);
 	};
 
 	window.requestAnimationFrame(Tick);
@@ -1007,7 +1080,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 	document.addEventListener("click", evt => {
 		if (!evt.target) return;
 
-		console.log(evt.target.id);
+		if (evt.target == splashElement) EnterMainMenu();
 		if (evt.target == mainMenuButtonElement) Pause();
 		else if (evt.target == mainMenuResumeButtonElement) Resume();
 		else if (evt.target == mainMenuNewGameButtonElement) StartNewGame();
@@ -1033,6 +1106,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 		if (UnitElement.isElementUnit(evt.target)) {
 			if (!evt.shiftKey) DeselectAllUnits();
 			evt.target.select();
+			evt.target.playWhatAudio();
 		} else if (evt.target == minimapElement) {
 			window.scrollTo(evt.offsetX * MINIMAP_SCALE - window.innerWidth/2, evt.offsetY * MINIMAP_SCALE - window.innerHeight/2);
 			UpdateMinimap();
@@ -1111,8 +1185,9 @@ document.addEventListener("DOMContentLoaded", evt => {
 		evt.preventDefault();
 		if (CurrentBuildingPlaceType) CurrentBuildingPlaceType = null;
 		const targetUnitElm = evt.target;
-		GetSelectedUnits().forEach(unitElm => {
-			if (unitElm.isMobile) {
+		const selectedUnits = GetSelectedUnits();
+		selectedUnits.forEach(unitElm => {
+			if (unitElm.playerID == PLAYER_HUMAN && unitElm.isMobile) {
 				if (!evt.target || !UnitElement.isElementUnit(evt.target)) {
 					if (evt.ctrlKey && unitElm.isAttackingUnit) unitElm.orderAttackMoveToPoint(evt.pageX, evt.pageY);
  					else unitElm.orderMoveToPoint(evt.pageX, evt.pageY);
@@ -1120,6 +1195,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 				else unitElm.orderInteractWithUnit(evt.target);
 			}
 		})
+		if (selectedUnits.length > 0 && selectedUnits[0].playerID == PLAYER_HUMAN && selectedUnits[0].isMobile) selectedUnits[0].playAckAudio();
 	});
 
 	window.addEventListener("beforeunload", evt => {
