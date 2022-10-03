@@ -17,4 +17,4 @@ Battle of Nephthys is an olds-chool RTS resource game with emphasis on resource 
 - When you reach 100,000 resources you win.
 
 ### Changelog:
-The following game-breaking bugs have been fixed: _Resources not displaying properly, Unused units spawning accidentally, Audio playing infinitely and loudly, Player losing immediately after the first attack._
+The following game-breaking bugs have been fixed: _Resources not displaying properly, Unused units spawning accidentally, Audio playing infinitely and loudly, Mouse map navigation not working in embed player, Instant loss immediately after the first attack._
