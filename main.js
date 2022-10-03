@@ -15,6 +15,8 @@ const Order = {
 }
 
 const DEBUG_MODE = false;
+const FPS = 30;
+const AUDIO_MAX_INSTANCES = 3;
 const UNIT_SELECTOR = "x-unit";
 const SPRITE_SELECTOR = "x-sprite";
 const OVERLAY_SELECTOR = "x-overlay";
@@ -76,22 +78,20 @@ function AddUnitTypeData(type, name, hotkey, icon, tooltip, size, data = {}) {
 	if (!data.explosionSprite) UnitTypeData[type].explosionSprite = "Explosion";
 }
 function GetUnitTypeData(unitType) { return UnitTypeData[unitType]; }
-AddUnitTypeData(Type.Harvester, "Miner", "m", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, visionRange:TILE*8, moveSpeed:2, attackRange:MINING_RANGE, cooldownMax:10});
-AddUnitTypeData(Type.Interceptor, "Interceptor", "i", "🚀", "Cost: 50. Primary fighter unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, visionRange:TILE*12, moveSpeed:2, attackDamage:40, attackRange:TILE*10, cooldownMax:15});
+AddUnitTypeData(Type.Harvester, "Miner", "m", "👾", "Cost: 50. Primary harvest unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:100, visionRange:TILE*8, moveSpeed:1, attackRange:MINING_RANGE, cooldownMax:10});
+AddUnitTypeData(Type.Interceptor, "Interceptor", "i", "🚀", "Cost: 50. Primary fighter unit.", UNIT_SIZE_MEDIUM, {cost:50, elevation:1000, buildTime:30, hp:100, priority:50, visionRange:TILE*12, moveSpeed:1.4, attackDamage:40, attackRange:TILE*10, cooldownMax:15});
 // AddUnitTypeData(Type.Destroyer, "Destroyer", "d", "🚝", "Cost: 300. Heavy fighter unit.", UNIT_SIZE_LARGE, {cost:50, elevation:1000, buildTime:30, hp:400, priority:25, visionRange:TILE*12, moveSpeed:1, attackDamage:50, attackRange:TILE*6, cooldownMax:15});
 AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", "Cost: 400. Primary resource depot and harvester training facility.", UNIT_SIZE_XLARGE, {isBuilding:true, cost:400, visionRange:TILE*12, elevation:500, buildTime:30, hp:1000, priority:300, powerRange:TILE*10, unitsTrained:[Type.Harvester, Type.Interceptor]});
 AddUnitTypeData(Type.PowerExtender, "Power Extender", "p", "📍", "Cost: 100. Extends power range to allow base expansion.", UNIT_SIZE_MEDIUM, {isBuilding: true, cost:100, elevation:500, visionRange:TILE*8, buildTime:30, hp:200, priority:100, powerRange:TILE*8});
-AddUnitTypeData(Type.StaticDefense, "Tesla Coil Defense", "t", "🗼", "Cost: 200. Primary static defense structure.", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:200, elevation:500, visionRange:TILE*15, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
+AddUnitTypeData(Type.StaticDefense, "Defense Turret", "t", "🗼", "Cost: 200. Primary static defense structure.", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:200, elevation:500, visionRange:TILE*15, buildTime:30, hp:1000, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", "", UNIT_SIZE_LARGE);
 AddUnitTypeData(Type.Artefact, "Precursor Artefact", "a", "🗿", "", UNIT_SIZE_SMALL);
 AddUnitTypeData(Type.DerelictStation, "Derelict Station", "", "✈️", "", UNIT_SIZE_XLARGE);
 
-AddUnitTypeData(Type.AlienAffliction, "Affliction", null, "🦇", "", UNIT_SIZE_SMALL, {elevation:1000, hp:25, priority:25, visionRange:TILE*12, moveSpeed:3, attackDamage:2, attackRange:TILE*6, cooldownMax:7, attackHitSprite:"VenomHit"});
+AddUnitTypeData(Type.AlienAffliction, "Affliction", null, "🦇", "", UNIT_SIZE_SMALL, {elevation:1000, hp:25, priority:25, visionRange:TILE*12, moveSpeed:1.4, attackDamage:2, attackRange:TILE*6, cooldownMax:7, attackHitSprite:"VenomHit"});
 // AddUnitTypeData(Type.AlienGorger, "Gorger", null, "🐉", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:1, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
-AddUnitTypeData(Type.PirateRaider, "Raider", null, "🛸", "", UNIT_SIZE_MEDIUM, {elevation:1000, hp:100, priority:25, visionRange:TILE*12, moveSpeed:2.5, attackDamage:8, attackRange:TILE*4, cooldownMax:10, attackHitSprite:"LaserHit"});
+AddUnitTypeData(Type.PirateRaider, "Raider", null, "🛸", "", UNIT_SIZE_MEDIUM, {elevation:1000, hp:100, priority:25, visionRange:TILE*12, moveSpeed:1.6, attackDamage:8, attackRange:TILE*4, cooldownMax:10, attackHitSprite:"LaserHit"});
 // AddUnitTypeData(Type.PirateMarauder, "Marauder", null, "🛩", "", UNIT_SIZE_LARGE, {elevation:1000, hp:100, priority:50, visionRange:TILE*12, moveSpeed:1, attackDamage:10, attackRange:TILE*6, cooldownMax:10});
-
-
 
 const GameEvent = {
 	// NewResource: "NewResource",
@@ -134,7 +134,8 @@ fogContainerElement,fogMaskElement,fogContainerMMElement,fogMaskMMElement,
 minimapViewPortElement, selectionRectangleElement, mainMenuButtonElement,
 mainMenuResumeButtonElement, mainMenuNewGameButtonElement, splashElement, victorySplashElement, messageBarElement;
 
-
+var audioInstanceCount = 0;
+var previousTime = 0;
 var PlayerResources = [0, 0, 0, 0];
 var eventInterval;
 var HumanPlayerTownHall = null;
@@ -153,6 +154,8 @@ var MusicAudio = null;
 var Difficulty = 0;
 var EventTimer = 0;
 var MessageHideInterval = null;
+
+
 
 const log = console.log;
 
@@ -458,7 +461,7 @@ class UnitElement extends HTMLElement {
 		if (!this.previousResourceNode || !this.previousResourceNode.isActive || this.previousResourceNode.remainingResources == 0) resourceNode = FindNearestUnitOfType(this, Type.ResourceNode, MINING_SEARCH_RANGE)
 		if (resourceNode) this.orderToHarvestResourceUnit(resourceNode);
 		else {
-			log("Unable to find nearby resources, idling.")
+			// log("Unable to find nearby resources, idling.")
 			this.resetToIdle();
 		}
 		return resourceNode != null;
@@ -510,7 +513,7 @@ class UnitElement extends HTMLElement {
 		return `rotate(${this.radians}rad)`;
 	}
 
-	Update() {
+	Update(deltaTime=1) {
 		if (this.hp <= 0) this.destroy();
 
 		if ((this.isAttackingUnit || this.isStaticDefense) && this.order == Order.Idle) this.order = Order.Guard;
@@ -523,7 +526,7 @@ class UnitElement extends HTMLElement {
 		    var deltaX = this.destinationX - this.centerX;
 		    if (Math.abs(deltaX) > TILE/10) {
 			    deltaX = deltaX / Math.sqrt(deltaX * deltaX);
-			    this.centerX += deltaX * this.moveSpeed;
+			    this.centerX += deltaX * this.moveSpeed * deltaTime;
 		    } else {
 		    	this.destinationX = Number.NaN;
 		    }
@@ -534,7 +537,7 @@ class UnitElement extends HTMLElement {
 		    var deltaY = this.destinationY - this.centerY;
 		    if (Math.abs(deltaY) > TILE/10) {
 			    deltaY = deltaY / Math.sqrt(deltaY * deltaY);
-			    this.centerY += deltaY * this.moveSpeed;
+			    this.centerY += deltaY * this.moveSpeed * deltaTime;
 		    } else {
 		    	this.destinationY = Number.NaN;
 		    }
@@ -590,7 +593,6 @@ class UnitElement extends HTMLElement {
 			// Pass
 		} else {
 			log("Did not manage order", this.order);
-			debugger;
 			this.resetToIdle();
 		}
 
@@ -751,7 +753,7 @@ function LoseGame() {
 }
 
 function StartNewGame() {
-	GetAllUnits().forEach(unitElm => unitElm.remove());
+	GetAllUnits().forEach(unitElm => unitElm.destroy());
 	GameStarted = true;
 	Difficulty = 0;
 	EventTimer = 0;
@@ -876,7 +878,11 @@ function DisplayErrorMessage(message) {
 }
 
 function PlayAudio(fileName) {
-	new Audio(`audio/${fileName}.mp3`).play();
+	if (audioInstanceCount > AUDIO_MAX_INSTANCES) return;
+	audioInstanceCount++;
+	const a = new Audio(`audio/${fileName}.mp3`);
+	a.addEventListener('ended', e => audioInstanceCount--);
+	a.play();
 }
 
 function PlayMusic() {
@@ -1083,7 +1089,11 @@ function Resume() {
 	MusicAudio.play();
 }
 
-function Tick(ms) {
+function Tick(time) {
+	var timeInSeconds = time * 0.001;
+	var deltaTime = (time - previousTime) / 10;
+	previousTime = time;
+
 	document.body.classList.toggle("paused", Paused);
 	mainMenuResumeButtonElement.classList.toggle("visible", GameStarted);
 	if (!Paused) {
@@ -1092,7 +1102,7 @@ function Tick(ms) {
 			victorySplashElement.classList.add("visible");
 		}
 		if (GetAllPlayerUnits(PLAYER_HUMAN).length == 0) LoseGame();
-		GetAllUnits().forEach(unitElm => unitElm.Update());
+		GetAllUnits().forEach(unitElm => unitElm.Update(deltaTime));
 
 		tooltipElement.classList.toggle("visible", TooltipDisplaying);
 		if (TooltipDisplaying) {
@@ -1125,7 +1135,7 @@ function Tick(ms) {
 		if (mouseClientX <= 0) scrollX -= TILE/2;
 		if (mouseClientY >= window.innerHeight - TILE) scrollY += TILE/2;
 		if (mouseClientY <= 0) scrollY -= TILE/2;
-		if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX, scrollY);
+		if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX*deltaTime, scrollY*deltaTime);
 
 		while(EventTimer >= GAME_EVENT_THRESHOLD) {
 			EventTimer -= GAME_EVENT_THRESHOLD;
