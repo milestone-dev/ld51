@@ -46,6 +46,7 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const RESOURCE_GOAL = 100000;
 const PLAYER_START_RESOURCES = 50;
 
+
 const RESOURCE_CARRY_AMOUNT_MAX = 8;
 
 const Type = {
@@ -85,7 +86,7 @@ AddUnitTypeData(Type.ResourceDepot, "Mining Base", "b", "🛰", "Cost: 400. Prim
 AddUnitTypeData(Type.PowerExtender, "Power Extender", "p", "📍", "Cost: 100. Extends power range to allow base expansion.", UNIT_SIZE_MEDIUM, {isBuilding: true, cost:100, elevation:500, visionRange:TILE*8, buildTime:30, hp:200, priority:100, powerRange:TILE*8});
 AddUnitTypeData(Type.StaticDefense, "Defense Turret", "t", "🗼", "Cost: 200. Primary static defense structure.", UNIT_SIZE_MEDIUM, {isBuilding:true, cost:200, elevation:500, visionRange:TILE*15, buildTime:30, hp:600, priority:70, attackDamage:40, attackRange:TILE*10, cooldownMax:10});
 AddUnitTypeData(Type.ResourceNode, "Asteroid", "n", "🪨", "", UNIT_SIZE_LARGE);
-AddUnitTypeData(Type.Artefact, "Precursor Artefact", "a", "🗿", "", UNIT_SIZE_SMALL);
+AddUnitTypeData(Type.Artefact, "Precursor Artefact", null, "🗿", "", UNIT_SIZE_SMALL);
 AddUnitTypeData(Type.DerelictStation, "Derelict Station", "", "✈️", "", UNIT_SIZE_XLARGE);
 
 AddUnitTypeData(Type.AlienAffliction, "Affliction", null, "🦇", "", UNIT_SIZE_SMALL, {elevation:1000, hp:75, priority:25, visionRange:TILE*12, moveSpeed:1.1, attackDamage:2, attackRange:TILE*6, cooldownMax:7, attackHitSprite:"VenomHit"});
@@ -154,6 +155,10 @@ var MusicAudio = null;
 var Difficulty = 0;
 var EventTimer = 0;
 var MessageHideInterval = null;
+var KeyADown = false;
+var KeyWDown = false;
+var KeySDown = false;
+var KeyDDown = false;
 
 
 
@@ -423,7 +428,7 @@ class UnitElement extends HTMLElement {
 			this.orderMoveToAttackUnit(targetUnit);
 		} else {
 			// TODO handle Attack, Follow etc
-			log("unhandled orderInteractWithUnit");
+			// log("unhandled orderInteractWithUnit");
 		}
 	}
 
@@ -620,7 +625,7 @@ class UnitElement extends HTMLElement {
 					} else this.cooldown--;
 				} else {
 					// Look for more resources, otherwise return to home.
-					log("Tring to mine a resource node that is now gone, find another one");
+					// log("Tring to mine a resource node that is now gone, find another one");
 					if (!this.harvestNearbyResources() && this.resourceCarryAmount > 0) this.returnToNearbyDepot();
 				}
 			} else {
@@ -1131,10 +1136,10 @@ function Tick(time) {
 
 		var scrollX = 0;
 		var scrollY = 0;
-		if (mouseClientX >= window.innerWidth - TILE) scrollX += TILE/2;
-		if (mouseClientX <= 0) scrollX -= TILE/2;
-		if (mouseClientY >= window.innerHeight - TILE) scrollY += TILE/2;
-		if (mouseClientY <= 0) scrollY -= TILE/2;
+		if (KeyDDown || mouseClientX >= window.innerWidth - TILE) scrollX += TILE/2;
+		if (KeyADown || mouseClientX <= 0) scrollX -= TILE/2;
+		if (KeySDown || mouseClientY >= window.innerHeight - TILE) scrollY += TILE/2;
+		if (KeyWDown || mouseClientY <= 0) scrollY -= TILE/2;
 		if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX*deltaTime, scrollY*deltaTime);
 
 		while(EventTimer >= GAME_EVENT_THRESHOLD) {
@@ -1231,7 +1236,18 @@ document.addEventListener("DOMContentLoaded", evt => {
 		}
 	})
 
+	document.addEventListener("keydown", evt => {
+		if (evt.key == "w") KeyWDown = true;
+		if (evt.key == "a") KeyADown = true;
+		if (evt.key == "s") KeySDown = true;
+		if (evt.key == "d") KeyDDown = true;
+	});
+
 	document.addEventListener("keyup", evt => {
+		if (evt.key == "w") KeyWDown = false;
+		if (evt.key == "a") KeyADown = false;
+		if (evt.key == "s") KeySDown = false;
+		if (evt.key == "d") KeyDDown = false;
 		if (evt.key == "s" && GetSelectedUnit()) GetSelectedUnit().stop();
 
 		Object.keys(UnitTypeData).forEach(type => {
