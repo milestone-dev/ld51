@@ -110,7 +110,7 @@ const GameEvent = {
 	// NetworkError: "NetworkError",
 } 
 const GameEventData = {}
-var GameEvents = [];
+const GameEvents = [];
 function AddGameEventData(id, message, weight) {GameEventData[id] = {id, message, weight}; }
 function GetGameEvent(id) { return GameEventData[id]; }
 AddGameEventData(GameEvent.NewResource, "A new resource has been discovered", 10);
@@ -127,6 +127,9 @@ AddGameEventData(GameEvent.MoraleLoss, "Worker morale has taken a hit. Worker sp
 AddGameEventData(GameEvent.NetworkError, "A long range frequency network outage has been discovered.", 10);
 AddGameEventData(GameEvent.RivalMiners, "A rival mining team has entered the sector in search of riches", 10);
 
+const Units = [];
+const PlayerUnits = [[], [], [], []];
+const SelectedUnits = [];
 var UNIT_ID = 0;
 var mouseX, mouseY, mouseDown, mousePlaceX, mousePlaceY, mouseClientX, mouseClientY;
 var worldElement, uiElement, unitInfoElement, unitPortraitElement, trainButtonsElement, buildBarElement,
@@ -302,6 +305,8 @@ class UnitElement extends HTMLElement {
 	distanceToUnit(unitElm) { return this.distanceToPoint(unitElm.centerX, unitElm.centerY); }
 
 	select() {
+		if (SelectedUnits.includes(this)) return;
+		SelectedUnits.push(this);
 		this.classList.add("selected");
 		if (this.minimapUnitElement) this.minimapUnitElement.classList.add("selected");
 	}
@@ -338,6 +343,7 @@ class UnitElement extends HTMLElement {
 	}
 
 	deselect() {
+		SelectedUnits.splice(SelectedUnits.indexOf(this), 1);
 		this.classList.remove("selected");
 		if (this.minimapUnitElement) this.minimapUnitElement.classList.remove("selected");
 	}
@@ -452,8 +458,9 @@ class UnitElement extends HTMLElement {
 		this.hp = 0;
 		if (this.visionElement) this.visionElement.remove();
 		if (this.minimapUnitElement) this.minimapUnitElement.remove();
+		Units.splice(Units.indexOf(this), 1);
+		PlayerUnits[this.playerID].splice(Units.indexOf(this), 1);
 		this.remove();
-
 	}
 
 	facePoint(x,y) {
@@ -512,6 +519,10 @@ class UnitElement extends HTMLElement {
 
 	get transform() {
 		return `translate3d(${px(this.centerX-this.size/2)}, ${px(this.centerY-this.size/2)}, 0)`;
+	}
+
+	get minimapTransform() {
+		return `translate3d(${px(this.centerX/MINIMAP_SCALE)}, ${px(this.centerY/MINIMAP_SCALE)}, 0)`;
 	}
 
 	get imageTransform() {
@@ -604,14 +615,13 @@ class UnitElement extends HTMLElement {
 		// TRANSFORM
 		this.style.transform = this.transform;
 		this.imageElement.style.transform = this.imageTransform;
-		this.minimapUnitElement.style.left = px(this.centerX/MINIMAP_SCALE);
-		this.minimapUnitElement.style.top = px(this.centerY/MINIMAP_SCALE);
-		if (this.visionElement && this.visionMMElement) {
-			this.visionElement.setAttribute("cx", this.centerX);
-			this.visionElement.setAttribute("cy", this.centerY);
-			this.visionMMElement.setAttribute("cx", this.centerX/MINIMAP_SCALE);
-			this.visionMMElement.setAttribute("cy", this.centerY/MINIMAP_SCALE);
-		}
+		this.minimapUnitElement.style.transform = this.minimapTransform;
+		// if (this.visionElement && this.visionMMElement) {
+		// 	this.visionElement.setAttribute("cx", this.centerX);
+		// 	this.visionElement.setAttribute("cy", this.centerY);
+		// 	this.visionMMElement.setAttribute("cx", this.centerX/MINIMAP_SCALE);
+		// 	this.visionMMElement.setAttribute("cy", this.centerY/MINIMAP_SCALE);
+		// }
 
 		if (this.order == Order.HarvestResourceNode) {
 			if (this.resourceCarryAmount < RESOURCE_CARRY_AMOUNT_MAX) {
@@ -758,11 +768,11 @@ function LoseGame() {
 }
 
 function StartNewGame() {
-	GetAllUnits().forEach(unitElm => unitElm.destroy());
+	Units.forEach(unitElm => unitElm.destroy());
 	GameStarted = true;
 	Difficulty = 0;
 	EventTimer = 0;
-	GetAllUnits().forEach(unitElm => unitElm.remove());
+	Units.forEach(unitElm => unitElm.remove());
 	window.setTimeout(e => window.scrollTo(WORLD_SIZE/2 - window.innerWidth/2, WORLD_SIZE/2 - window.innerHeight/2), 100);
 
 	if (true) {
@@ -818,35 +828,31 @@ function GetRandomWorldPointNearEdge() {
 	return point;
 }
 
-function GetAllUnits() {
-	return worldElement.querySelectorAll(UNIT_SELECTOR);
-}
-
 function GetSelectedUnits() {
-	return worldElement.querySelectorAll(".selected");
+	return SelectedUnits;
 }
 
 function GetSelectedUnit() {
-	return worldElement.querySelector(".selected")
+	return SelectedUnits[0];
 }
 
 function DeselectAllUnits() {
-	return worldElement.querySelectorAll(".selected").forEach(unitElm => unitElm.deselect());
+	SelectedUnits.forEach(unitElm => unitElm.deselect());
 }
 
 function GetAllPlayerUnits(playerID) {
-	return Array.from(GetAllUnits()).filter(unitElm => unitElm.playerID == playerID);
+	return PlayerUnits[playerID];
 }
 
 function GetAllPowerGenerators(playerID) {
-	const units = Array.from(GetAllUnits())
+	const units = Units
 	.filter((unitElm) => { return unitElm.playerID == playerID})
 	.filter((unitElm) => { return unitElm.providesPower});
 	return units;
 }
 
 function FindNearestUnitOfType(originUnitElm, type, searchRange, samePlayerRequirement = false) {
-	const nearestUnit = Array.from(GetAllUnits())
+	const nearestUnit = Units
 	.filter((unitElm) => { return samePlayerRequirement ? (originUnitElm.playerID == unitElm.playerID) : true })
 	.filter((unitElm) => { return  unitElm.type == type })
 	.filter((unitElm) => { return unitElm.distanceToUnit(originUnitElm) < searchRange })
@@ -856,8 +862,8 @@ function FindNearestUnitOfType(originUnitElm, type, searchRange, samePlayerRequi
 }
 
 function FindNearestEnemyUnit(originUnitElm, searchRange) {
-	const nearestUnit = Array.from(GetAllUnits())
-	.filter((unitElm) => { return !unitElm.isNeutral && unitElm.playerID != originUnitElm.playerID })
+	const enemyPlayerID = originUnitElm.playerID == PLAYER_HUMAN ? PLAYER_ENEMY : PLAYER_HUMAN;
+	const nearestUnit = PlayerUnits[enemyPlayerID]
 	.filter((unitElm) => { return unitElm.distanceToUnit(originUnitElm) < searchRange })
 	.sort((a, b) => { return a.priority - b.priority; })
 	.sort((a, b) => { return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm); })
@@ -872,6 +878,8 @@ function CreateUnit(type, playerID, x, y) {
 	unitElm.Move(x,y);
 	unitElm.Awake();
 	unitElm.Update();
+	Units.push(unitElm);
+	PlayerUnits[playerID].push(unitElm);
 	return unitElm;
 }
 
@@ -932,7 +940,7 @@ function PingMinimapAtPoint(x,y) {
 function UpdateMinimap() {
 	if (Paused) return;
 	// minimapElement.innerHTML = "";
-	GetAllUnits().forEach(unitElm => {
+	Units.forEach(unitElm => {
 		// const mElm = document.createElement("div");
 
 		// mElm.style.left = px(unitElm.centerX/MINIMAP_SCALE);
@@ -1107,7 +1115,7 @@ function Tick(time) {
 			victorySplashElement.classList.add("visible");
 		}
 		if (GetAllPlayerUnits(PLAYER_HUMAN).length == 0) LoseGame();
-		GetAllUnits().forEach(unitElm => unitElm.Update(deltaTime));
+		Units.forEach(unitElm => unitElm.Update(deltaTime));
 
 		tooltipElement.classList.toggle("visible", TooltipDisplaying);
 		if (TooltipDisplaying) {
@@ -1271,8 +1279,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 		evt.preventDefault();
 		if (CurrentBuildingPlaceType) CurrentBuildingPlaceType = null;
 		const targetUnitElm = evt.target;
-		const selectedUnits = GetSelectedUnits();
-		selectedUnits.forEach(unitElm => {
+		SelectedUnits.forEach(unitElm => {
 			if (unitElm.playerID == PLAYER_HUMAN && unitElm.isMobile) {
 				if (evt.target == minimapElement) {
 					if (evt.ctrlKey && unitElm.isAttackingUnit) unitElm.orderAttackMoveToPoint(evt.offsetX * MINIMAP_SCALE, evt.offsetY * MINIMAP_SCALE);
@@ -1286,7 +1293,7 @@ document.addEventListener("DOMContentLoaded", evt => {
 				}
 			}
 		})
-		if (selectedUnits.length > 0 && selectedUnits[0].playerID == PLAYER_HUMAN && selectedUnits[0].isMobile) selectedUnits[0].playAckAudio();
+		if (SelectedUnits.length > 0 && SelectedUnits[0].playerID == PLAYER_HUMAN && SelectedUnits[0].isMobile) SelectedUnits[0].playAckAudio();
 	});
 
 	window.addEventListener("beforeunload", evt => {
