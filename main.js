@@ -184,10 +184,10 @@ class UnitElement extends HTMLElement {
 		this.playerID = PLAYER_NEUTRAL;
 		this.type = Type.Undefined;
 		this.name = null;
-		this.order = Order.Undefined;
+		this._order = Order.Undefined;
 		this.isMoving = false;
 		this.moveSpeed = 0;
-		this.hp = 1;
+		this._hp = 1;
 		this.targetUnit = null;
 		this.targetX = Number.NaN;
 		this.targetY = Number.NaN;
@@ -207,6 +207,20 @@ class UnitElement extends HTMLElement {
 		this.resourceCarryAmount = 0;
 		this.previousResourceNode = null;
 		this.remainingResources = 6000; // TODO move to data
+	}
+
+	get order() {return this._order;}
+	set order(order) {
+		const updated = (order != this._order && this.isSelected);
+		this._order = order;
+		if (updated) UpdateUnitInfo(true);
+	}
+
+	get hp() {return this._hp;}
+	set hp(hp) {
+		const updated = (hp != this._hp && this.isSelected);
+		this._hp = hp;
+		if (updated) UpdateUnitInfo(true);		
 	}
 
 	Setup(type, playerID) {
@@ -270,8 +284,8 @@ class UnitElement extends HTMLElement {
 	}
 
 	Move(x, y) {
-		this.centerX = x;
-		this.centerY = y;
+		this.centerX = Math.round(x);
+		this.centerY = Math.round(y);
 	}
 
 	Awake() {
@@ -342,8 +356,13 @@ class UnitElement extends HTMLElement {
 		}
 	}
 
+	get isSelected() {
+		return !!this.classList.contains("selected");
+	}
+
 	deselect() {
-		SelectedUnits.splice(SelectedUnits.indexOf(this), 1);
+		const index = SelectedUnits.indexOf(this);
+		if (index != -1) SelectedUnits.splice(index, 1);
 		this.classList.remove("selected");
 		if (this.minimapUnitElement) this.minimapUnitElement.classList.remove("selected");
 	}
@@ -446,21 +465,17 @@ class UnitElement extends HTMLElement {
 	stop() {
 		this.stopTravelling();
 		this.order = Order.Idle;
-		// const r = this.getBoundingClientRect();
-		// const distance = 0;
-		// const moveDuration = distance / this.moveSpeed;
-		// this.style.transitionDuration = moveDuration + "s";
-		// this.style.left = px(r.x - r.width/2); // window.scrollX
-		// this.style.top = px(r.y - r.height/2); // window.scrollY
 	}
 
 	destroy() {
 		this.hp = 0;
+		this.deselect();
 		if (this.visionElement) this.visionElement.remove();
 		if (this.minimapUnitElement) this.minimapUnitElement.remove();
+		PlayerUnits[this.playerID].splice(PlayerUnits[this.playerID].indexOf(this), 1);
 		Units.splice(Units.indexOf(this), 1);
-		PlayerUnits[this.playerID].splice(Units.indexOf(this), 1);
 		this.remove();
+		UpdateUnitInfo(true)
 	}
 
 	facePoint(x,y) {
@@ -505,7 +520,6 @@ class UnitElement extends HTMLElement {
 		imgElm.src = `img/sprite_${type}.png`;
 		elm.appendChild(imgElm);
 		this.appendChild(elm);
-		window.setTimeout(e => elm.remove(), EXPLOSION_SPRITE_TIMEOUT);
 	}
 
 	pickupUnit(unitElm) {
@@ -514,11 +528,12 @@ class UnitElement extends HTMLElement {
 		if (unitElm.type == Type.Artefact) PlayerResources[this.playerID] += 500;
 		else if (unitElm.type == Type.DerelictStation) PlayerResources[this.playerID] += 1000;
 		if (this.visionElement) this.visionElement.remove();
-		unitElm.remove();
+		unitElm.destroy();
 	}
 
 	get transform() {
-		return `translate3d(${px(this.centerX-this.size/2)}, ${px(this.centerY-this.size/2)}, 0)`;
+
+		return `translate3d(${px(Math.round(this.centerX-this.size/2))}, ${px(Math.round(this.centerY-this.size/2))}, 0px)`;
 	}
 
 	get minimapTransform() {
@@ -542,7 +557,7 @@ class UnitElement extends HTMLElement {
 		    var deltaX = this.destinationX - this.centerX;
 		    if (Math.abs(deltaX) > TILE/10) {
 			    deltaX = deltaX / Math.sqrt(deltaX * deltaX);
-			    this.centerX += deltaX * this.moveSpeed * deltaTime;
+			    this.centerX += Math.round(deltaX * this.moveSpeed * deltaTime);
 		    } else {
 		    	this.destinationX = Number.NaN;
 		    }
@@ -553,7 +568,7 @@ class UnitElement extends HTMLElement {
 		    var deltaY = this.destinationY - this.centerY;
 		    if (Math.abs(deltaY) > TILE/10) {
 			    deltaY = deltaY / Math.sqrt(deltaY * deltaY);
-			    this.centerY += deltaY * this.moveSpeed * deltaTime;
+			    this.centerY += Math.round(deltaY * this.moveSpeed * deltaTime);
 		    } else {
 		    	this.destinationY = Number.NaN;
 		    }
@@ -595,9 +610,8 @@ class UnitElement extends HTMLElement {
 		} else if (this.order == Order.AttackMoveToPoint) {
 			//
 		} else if (this.order == Order.MoveToAttackUnit) {
-			if (this.targetUnit) {
+			if (this.targetUnit && this.targetUnit.isActive) {
 				if (this.distanceToUnit(this.targetUnit) < this.attackRange) {
-					// this.stop();
 					this.stopTravelling();
 					this.order = Order.AttackUnit;
 				} else {
@@ -613,9 +627,13 @@ class UnitElement extends HTMLElement {
 		}
 
 		// TRANSFORM
-		this.style.transform = this.transform;
-		this.imageElement.style.transform = this.imageTransform;
-		this.minimapUnitElement.style.transform = this.minimapTransform;
+		if (this.style.transform != this.transform) {
+			this.style.transform = this.transform;
+			this.minimapUnitElement.style.transform = this.minimapTransform;
+		}
+		if (this.imageElement.style.transform != this.imageTransform) {
+			this.imageElement.style.transform = this.imageTransform;
+		}
 		// if (this.visionElement && this.visionMMElement) {
 		// 	this.visionElement.setAttribute("cx", this.centerX);
 		// 	this.visionElement.setAttribute("cy", this.centerY);
@@ -751,7 +769,6 @@ function SetupGame() {
 
 	// Core loops
 	window.setInterval(UpdateUI, GAME_UI_REFRESH_INTERVAL);
-	window.setInterval(e => UpdateUnitInfo(true), GAME_UI_REFRESH_INTERVAL);
 	window.setInterval(UpdateMinimap, 100);
 	window.setInterval(e => {if (!Paused) EventTimer += 100}, 100);
 	window.requestAnimationFrame(Tick);
@@ -772,35 +789,19 @@ function StartNewGame() {
 	GameStarted = true;
 	Difficulty = 0;
 	EventTimer = 0;
-	Units.forEach(unitElm => unitElm.remove());
+	Units.forEach(unitElm => unitElm.destroy());
 	window.setTimeout(e => window.scrollTo(WORLD_SIZE/2 - window.innerWidth/2, WORLD_SIZE/2 - window.innerHeight/2), 100);
 
-	if (true) {
-		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 250, WORLD_SIZE/2 + 200);
-		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 200, WORLD_SIZE/2 - 250);
-		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
-		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 250, WORLD_SIZE/2 - 150);
-		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 150, WORLD_SIZE/2 + 250);
-		HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
-		CreateUnit(Type.StaticDefense, PLAYER_HUMAN, WORLD_SIZE/2 + TILE*4, WORLD_SIZE/2 + TILE*4);
-		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 + 100);
-		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 - 100);
-		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 - 100, WORLD_SIZE/2 + 100);
-
-		for (var i = 0; i < 100; i++) {
-			CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, GetRandomWorldPoint(), GetRandomWorldPoint());
-		}
-
-		// for (var i = 0; i < 3; i++) {
-		// 	const unit = CreateUnit(Type.AlienAffliction, PLAYER_ENEMY, GetRandomWorldPoint(), GetRandomWorldPoint());
-		// 	unit.orderToPatrolInArea();
-		// }
-	} else {
-		HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
-		CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
-		CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
-	}
-
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 250, WORLD_SIZE/2 + 200);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 200, WORLD_SIZE/2 - 250);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 - 220, WORLD_SIZE/2 + 100);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 250, WORLD_SIZE/2 - 150);
+	CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, WORLD_SIZE/2 + 150, WORLD_SIZE/2 + 250);
+	HumanPlayerTownHall = CreateUnit(Type.ResourceDepot, PLAYER_HUMAN, WORLD_SIZE/2, WORLD_SIZE/2);
+	CreateUnit(Type.StaticDefense, PLAYER_HUMAN, WORLD_SIZE/2 + TILE*4, WORLD_SIZE/2 + TILE*4);
+	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 + 100);
+	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 - 100);
+	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 - 100, WORLD_SIZE/2 + 100);
 	Resume();
 	UpdateMinimap();
 	UpdateUI();
@@ -832,12 +833,20 @@ function GetSelectedUnits() {
 	return SelectedUnits;
 }
 
+function IsUnitSelected(unitElm) {
+	return SelectedUnits.indexOf(unitElm) != -1;
+}
+
 function GetSelectedUnit() {
-	return SelectedUnits[0];
+	return SelectedUnits.length > 0 ? SelectedUnits[0] : null;
 }
 
 function DeselectAllUnits() {
-	SelectedUnits.forEach(unitElm => unitElm.deselect());
+	SelectedUnits.forEach(unitElm => {
+		unitElm.classList.remove("selected");
+		unitElm.minimapUnitElement.classList.remove("selected");
+	});
+	SelectedUnits.length = 0;
 }
 
 function GetAllPlayerUnits(playerID) {
@@ -864,7 +873,7 @@ function FindNearestUnitOfType(originUnitElm, type, searchRange, samePlayerRequi
 function FindNearestEnemyUnit(originUnitElm, searchRange) {
 	const enemyPlayerID = originUnitElm.playerID == PLAYER_HUMAN ? PLAYER_ENEMY : PLAYER_HUMAN;
 	const nearestUnit = PlayerUnits[enemyPlayerID]
-	.filter((unitElm) => { return unitElm.distanceToUnit(originUnitElm) < searchRange })
+	.filter((unitElm) => { return unitElm.isActive && unitElm.distanceToUnit(originUnitElm) < searchRange })
 	.sort((a, b) => { return a.priority - b.priority; })
 	.sort((a, b) => { return a.distanceToUnit(originUnitElm) - b.distanceToUnit(originUnitElm); })
 	if (nearestUnit.length == 0) return null;
@@ -879,7 +888,7 @@ function CreateUnit(type, playerID, x, y) {
 	unitElm.Awake();
 	unitElm.Update();
 	Units.push(unitElm);
-	PlayerUnits[playerID].push(unitElm);
+	PlayerUnits[playerID] = Units.filter(u => u.playerID == playerID);
 	return unitElm;
 }
 
@@ -949,45 +958,46 @@ function UpdateMinimap() {
 		// minimapElement.appendChild(mElm);
 	});
 
-	minimapViewPortElement.style.left = px(window.scrollX/MINIMAP_SCALE);
-	minimapViewPortElement.style.top = px(window.scrollY/MINIMAP_SCALE);
-	minimapViewPortElement.style.width = px(window.innerWidth/MINIMAP_SCALE);
-	minimapViewPortElement.style.height = px(window.innerHeight/MINIMAP_SCALE);
+//${window.innerWidth/MINIMAP_SCALE}, ${window.innerWidth/MINIMAP_SCALE}
+
+	const scaleX = window.innerWidth/WORLD_SIZE;
+	const scaleY = window.innerHeight/WORLD_SIZE;
+	const transform = `translate3d(${px(window.scrollX/MINIMAP_SCALE)}, ${px(window.scrollY/MINIMAP_SCALE)}, 0) scale3d(${scaleX},${scaleY},1)`;
+	if (minimapViewPortElement.style.transform != transform) minimapViewPortElement.style.transform = transform;
 }
 
 function UpdateUnitInfo(force=false) {
 	if (Paused) return;
 	const selectedUnit = GetSelectedUnit();
 	// if (CurrentDisplayUnit != selectedUnit)
-	const render = function(...args) {
-		unitInfoElement.innerHTML = args.join("<br>");
-	}
+	const render = function(...args) {unitInfoElement.innerHTML = args.join("<br>"); }
+
 	if (CurrentDisplayUnit && !CurrentDisplayUnit.isActive) {
 		CurrentDisplayUnit = null;
 		unitInfoElement.innerHTML = "";
 		trainButtonsElement.innerHTML = "";
+		unitPortrait.src = "";
 		return;
 	}
 
-	var refreshInfo = (force || CurrentDisplayUnit != selectedUnit);
+	var refreshInfo = (force || (selectedUnit != null && CurrentDisplayUnit != selectedUnit));
 	var refreshButtons = (CurrentDisplayUnit != selectedUnit);
 
-	if (!selectedUnit) {
+	if (!selectedUnit && CurrentDisplayUnit != null) {
 		CurrentDisplayUnit = null;
 		unitInfoElement.innerHTML = "";
 		trainButtonsElement.innerHTML = "";
-		return;
 	}
 	
 	if (CurrentDisplayUnit != selectedUnit) {
 		CurrentDisplayUnit = selectedUnit;
 	}
 
-	if (refreshInfo) {
+	if (refreshInfo && selectedUnit) {
 		unitPortrait.src = selectedUnit.portraitImage;
 		unitInfoElement.innerHTML = "";
 		if (CurrentDisplayUnit.isHarvester) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, CurrentDisplayUnit.order, `Cargo: ${CurrentDisplayUnit.resourceCarryAmount} ore`);
-		else if (CurrentDisplayUnit.isAttackingUnit) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, `Damage: ${CurrentDisplayUnit.attackDamage}`, CurrentDisplayUnit.order,);
+		else if (CurrentDisplayUnit.isAttackingUnit) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, `Damage: ${CurrentDisplayUnit.attackDamage}`, CurrentDisplayUnit.order);
 		else if (CurrentDisplayUnit.isResourceNode) render(CurrentDisplayUnit, `Resources: ${CurrentDisplayUnit.remainingResources}`);
 		else if (!CurrentDisplayUnit.isMobile) render(CurrentDisplayUnit, `${CurrentDisplayUnit.hp} hp`, CurrentDisplayUnit.order);
 		else render(CurrentDisplayUnit, CurrentDisplayUnit.order, CurrentDisplayUnit.targetUnit);
@@ -1140,14 +1150,19 @@ function Tick(time) {
 			buildingPlacementGhostElement.style.top = px(mousePlaceY);
 		}
 
-		UpdateUnitInfo();
+
+		if ((GetSelectedUnit() != null && CurrentDisplayUnit != GetSelectedUnit() || (CurrentDisplayUnit && !CurrentDisplayUnit.isActive))) {
+			UpdateUnitInfo();
+		}
+
 
 		var scrollX = 0;
 		var scrollY = 0;
-		if (KeyDDown || mouseClientX >= window.innerWidth - TILE) scrollX += TILE/2;
-		if (KeyADown || mouseClientX <= 0) scrollX -= TILE/2;
-		if (KeySDown || mouseClientY >= window.innerHeight - TILE) scrollY += TILE/2;
-		if (KeyWDown || mouseClientY <= 0) scrollY -= TILE/2;
+		const mouseMove = true;
+		if (KeyDDown || (mouseMove && mouseClientX >= window.innerWidth - TILE)) scrollX += TILE/2;
+		if (KeyADown || (mouseMove && mouseClientX <= 0)) scrollX -= TILE/2;
+		if (KeySDown || (mouseMove && mouseClientY >= window.innerHeight - TILE)) scrollY += TILE/2;
+		if (KeyWDown || (mouseMove && mouseClientY <= 0)) scrollY -= TILE/2;
 		if (scrollX != 0 || scrollY != 0) window.scrollBy(scrollX*deltaTime, scrollY*deltaTime);
 
 		while(EventTimer >= GAME_EVENT_THRESHOLD) {
@@ -1290,10 +1305,16 @@ document.addEventListener("DOMContentLoaded", evt => {
 	 					else unitElm.orderMoveToPoint(evt.pageX, evt.pageY);
 					}
 					else unitElm.orderInteractWithUnit(evt.target);
+
 				}
 			}
 		})
 		if (SelectedUnits.length > 0 && SelectedUnits[0].playerID == PLAYER_HUMAN && SelectedUnits[0].isMobile) SelectedUnits[0].playAckAudio();
+		UpdateUnitInfo();
+	});
+
+	document.addEventListener("animationend", evt => {
+		if (evt.target && evt.target.tagName.toLowerCase() == SPRITE_SELECTOR) evt.target.remove()
 	});
 
 	window.addEventListener("beforeunload", evt => {
