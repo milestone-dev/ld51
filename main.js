@@ -802,6 +802,14 @@ function StartNewGame() {
 	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 + 100);
 	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 - 100);
 	CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 - 100, WORLD_SIZE/2 + 100);
+
+	//const n = 0;
+	// for (var i = 0; i<n;i++) CreateUnit(Type.PirateRaider, PLAYER_ENEMY, WORLD_SIZE/2 - 200, WORLD_SIZE/2+ 200);
+	// for (var i = 0; i<n;i++) CreateUnit(Type.Interceptor, PLAYER_HUMAN, WORLD_SIZE/2 + 200, WORLD_SIZE/2- 200);
+	// for (var i = 0; i<n;i++) CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 100, WORLD_SIZE/2 + 100);
+	// for (var i = 0; i<n;i++) CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 - 100, WORLD_SIZE/2 - 100);
+	// for (var i = 0; i<n;i++) CreateUnit(Type.Harvester, PLAYER_HUMAN, WORLD_SIZE/2 + 200, WORLD_SIZE/2- 200);
+	for (var i = 0; i < 100; i++) CreateUnit(Type.ResourceNode, PLAYER_NEUTRAL, GetRandomWorldPoint(), GetRandomWorldPoint());
 	Resume();
 	UpdateMinimap();
 	UpdateUI();
