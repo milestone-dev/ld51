@@ -1011,7 +1011,7 @@ function UpdateUnitInfo(force=false) {
 		else render(CurrentDisplayUnit, CurrentDisplayUnit.order, CurrentDisplayUnit.targetUnit);
 	}
 
-	if (refreshButtons) {
+	if (refreshButtons && CurrentDisplayUnit) {
 		trainButtonsElement.innerHTML = "";
 		if (CurrentDisplayUnit.unitsTrained) {
 			CurrentDisplayUnit.unitsTrained.forEach(type => {
